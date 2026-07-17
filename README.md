@@ -192,6 +192,10 @@ The Zenodo record contains the processed experimental data used in the TopoTunne
 
 Experimental data should be cited using the metadata and references provided on the Zenodo record. The original CYP3A4 and LinB simulation studies remain the provenance sources for their respective molecular-dynamics datasets.
 
+## License
+
+Copyright (c) 2026 Yapeng Liu. All rights reserved. This project is provided for local, non-commercial research evaluation only. Republishing, reproducing, mirroring, redistributing, sublicensing, selling, or incorporating any part of the code or documentation into another distributed work is prohibited without prior written permission. See [LICENSE](LICENSE) for the complete terms.
+
 ## Important Notes
 
 - PDB names recorded in `tunnel_profiles.csv` must match files in the aligned-frame directory.
