@@ -1,0 +1,43 @@
+TopoTunnelMiner Proprietary License
+
+Copyright (c) 2026 Yapeng Liu. All rights reserved.
+
+This software, including its source code, documentation, user interface,
+figures, configuration files, and all associated materials (collectively,
+the "Software"), is proprietary and protected by applicable copyright and
+other intellectual-property laws.
+
+Permission is granted only to view, download, and execute an unmodified copy
+of the Software locally for personal, non-commercial research evaluation.
+This limited permission does not transfer ownership or grant any right to
+publish or redistribute the Software.
+
+Without prior express written permission from the copyright holder, you may
+not, in whole or in part:
+
+1. copy, reproduce, reprint, repost, republish, mirror, upload, transmit,
+   distribute, sublicense, sell, rent, lend, or otherwise make the Software
+   available to any third party, in source or binary form;
+2. create or distribute modified versions, translations, adaptations,
+   derivative works, packaged releases, or software incorporating any part
+   of the Software;
+3. use the Software or its contents for commercial services, products,
+   training materials, datasets, or paid research activities;
+4. remove, obscure, or alter this notice, authorship information, citations,
+   or other proprietary notices; or
+5. represent the Software or any part of it as your own work.
+
+No permission is granted for any form of republication or redistribution,
+including redistribution with attribution and redistribution without
+modification. Linking to the official repository is permitted, provided that
+the Software itself is not copied or republished.
+
+Any permission beyond the limited local research-evaluation right stated
+above must be obtained in advance and in writing from the copyright holder.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE, TITLE, AND NON-INFRINGEMENT. IN NO EVENT
+SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY CLAIM, DAMAGES,
+OR OTHER LIABILITY ARISING FROM, OUT OF, OR IN CONNECTION WITH THE SOFTWARE
+OR ITS USE.
