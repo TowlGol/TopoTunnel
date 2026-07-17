@@ -1,0 +1,20 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Generated pipeline outputs
+**/01_caver/
+**/02_reference/
+**/03_topology/
+**/04_path_points/
+**/ui_dataset_generated/
+*.log
+*.tmp
+
+ # Large CYP3A4 data are distributed through Zenodo
+CYP3A4
