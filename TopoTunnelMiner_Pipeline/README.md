@@ -7,7 +7,7 @@ The pipeline supports two entry points:
 1. Run segmented CAVER calculations and aggregate their tunnel profiles.
 2. Start from an existing CAVER `tunnel_profiles.csv` file and prepare the topology-mapped UI dataset.
 
-For the bundled CYP3A4 case, the CAVER output already exists. You can therefore skip the CAVER stage and run only **Reference-Conformation Mapping and Dataset Preparation**.
+The optional CYP3A4 reproduction data are distributed separately through Zenodo (`https://zenodo.org/records/21287445`). After downloading the deposited CAVER output, you can skip the CAVER stage and run only **Reference-Conformation Mapping and Dataset Preparation**.
 
 ## 1. Processing Workflow
 
@@ -117,13 +117,13 @@ The reference PDB must use residue numbering and atom names compatible with the 
 
 - Select the directory containing the frame-level PDB files.
 - Do not select an individual PDB.
-- CYP3A4 example: `..\CYP3A4\inputs\pdb_frames`.
+- External CYP3A4 example: the directory containing the 500 aligned PDB frames downloaded from Zenodo, such as `..\CYP3A4\inputs\pdb_frames` in a local arrangement.
 
 ### `Output Root Directory`
 
 - Parent directory for generated dataset folders.
 - Result path: `<Output Root>/<Dataset Name>/`.
-- For the bundled case, use `..\CYP3A4` if you want the result under the case directory, or use an independent writable output directory while testing.
+- For the external CYP3A4 case, use an independent writable output directory or a local ignored data directory such as `..\CYP3A4`.
 - Do not point it at `TopoTunnelMiner_UI/database`; keeping generated data outside the application source is safer.
 
 ### `Dataset Name`
@@ -135,13 +135,13 @@ The reference PDB must use residue numbering and atom names compatible with the 
 ### `Tunnel-Profile CSV File`
 
 - Existing CAVER profile file used by the mapping stage.
-- CYP3A4 example: `..\CYP3A4\caver_output\analysis\tunnel_profiles.csv`.
+- External CYP3A4 example: the extracted CAVER `analysis\tunnel_profiles.csv`, optionally arranged as `..\CYP3A4\caver_output\analysis\tunnel_profiles.csv`.
 - When stage 01 is selected, the GUI updates this input to the newly aggregated `01_caver/all_tunnel_profiles.csv`.
 
 ### `Reference-Conformation PDB File`
 
 - Optional explicit reference conformation.
-- CYP3A4 example: `..\CYP3A4\ui_dataset\representative_frame.pdb` for exact reproduction of the deposited case.
+- External CYP3A4 example: the deposited `representative_frame.pdb` for exact reference reuse, optionally arranged as `..\CYP3A4\ui_dataset\representative_frame.pdb`.
 - Leave empty to select a reference from the 500 PDB frames.
 
 ### `CPU Workers for Mapping and Preprocessing`
@@ -157,7 +157,7 @@ The reference PDB must use residue numbering and atom names compatible with the 
 
 - Comma-separated residue sequence numbers excluded from the four-atom neighborhood search.
 - Example: `1,2,500`.
-- Leave empty for the bundled CYP3A4 reproduction. The atom exclusions in the CAVER configuration control CAVER tunnel detection and are separate from this topology-mapping option.
+- Leave empty for the deposited CYP3A4 reproduction. The atom exclusions in the CAVER configuration control CAVER tunnel detection and are separate from this topology-mapping option.
 - Chain IDs and ranges such as `1-10` are not supported.
 
 ### `Mutation Sites`
@@ -191,7 +191,7 @@ These fields are needed only when **Segmented CAVER Tunnel Computation and Tunne
 ### `CAVER Configuration File`
 
 - Protein-specific CAVER settings.
-- CYP3A4: `..\CYP3A4\inputs\caver_config.txt`.
+- External CYP3A4 example: select the downloaded configuration file; one optional local path is `..\CYP3A4\inputs\caver_config.txt`.
 - The segmented runner overrides frame-range and stage-control fields in generated runtime copies; it does not modify the source file.
 
 ### `CAVER Home Directory`
@@ -201,7 +201,7 @@ These fields are needed only when **Segmented CAVER Tunnel Computation and Tunne
 
 ### CYP3A4 Key CAVER Settings
 
-The supplied case configuration uses:
+The CYP3A4 configuration distributed with the Zenodo data uses:
 
 | Parameter | Value |
 |---|---|
@@ -237,14 +237,14 @@ Commands, stage timings, and errors are displayed in `Analysis Log`. Diagnose fa
 
 ## 8. CYP3A4 Quick Reproduction
 
-The supplied case already contains CAVER output, so the shortest path is:
+The CYP3A4 case is not included in this GitHub repository. Download the relevant structures, CAVER output, and processed data from `https://zenodo.org/records/21287445`, then select their extracted locations in the GUI. If you arrange the downloaded data in a local ignored `CYP3A4` directory beside the code, the shortest path is:
 
 1. Run `python pipeline_gui.py`.
-2. Set `Aligned MD Frame Directory` to `CYP3A4/inputs/pdb_frames`.
+2. Set `Aligned MD Frame Directory` to the extracted directory containing the 500 aligned PDB frames, for example `CYP3A4/inputs/pdb_frames`.
 3. Set `Output Root Directory` to `CYP3A4` or another writable directory.
 4. Set `Dataset Name` to `ui_dataset_generated`.
-5. Set `Tunnel-Profile CSV File` to `CYP3A4/caver_output/analysis/tunnel_profiles.csv`.
-6. Set `Reference-Conformation PDB File` to `CYP3A4/ui_dataset/representative_frame.pdb` for exact reuse, or leave it empty to rerun reference selection.
+5. Set `Tunnel-Profile CSV File` to the extracted CAVER `analysis/tunnel_profiles.csv`, for example `CYP3A4/caver_output/analysis/tunnel_profiles.csv`.
+6. Set `Reference-Conformation PDB File` to the deposited `representative_frame.pdb` for exact reuse, or leave it empty to rerun reference selection.
 7. Set workers to 4 or 8.
 8. Leave `Excluded Residues` and `Mutation Sites` empty.
 9. Select only **Reference-Conformation Mapping and Dataset Preparation**.

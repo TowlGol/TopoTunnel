@@ -9,7 +9,6 @@
 ```text
 Github_Version/
 |-- README.md
-|-- CYP3A4/
 |-- TopoTunnelMiner_Pipeline/
 `-- TopoTunnelMiner_UI/
     |-- README.md
@@ -23,6 +22,8 @@ Github_Version/
     |-- resources/theme.qss
     `-- database/            # 空目录，可放用户自己的数据
 ```
+
+实验数据和CYP3A4复现案例不包含在GitHub代码仓库中，可从项目Zenodo记录（`https://zenodo.org/records/21287445`）单独下载。下载后的数据集可以放在任意可写目录，并通过`Add Dataset`加载。
 
 ### 1.1 源码文件索引
 
