@@ -1,553 +1,541 @@
 # TopoTunnelMiner Desktop UI
 
-本目录包含 TopoTunnelMiner 桌面前端，包括启动入口、数据库访问层、三维可视化、图表、数据导入辅助代码和主题文件。应用源码不内置实验数据库、PDB轨迹或统计结果，数据应由处理流水线生成或单独下载。
+This directory contains the TopoTunnelMiner desktop frontend, including the application entry point, database access layer, three-dimensional visualization, charts, data-import helpers, and theme resources. Experimental databases, PDB trajectories, and analysis CSV files are not included in the source package. Generate them with `TopoTunnelMiner_Pipeline` or download them separately from the project Zenodo record.
 
-本文档按照“安装 -> 启动 -> 准备数据 -> 加载数据 -> 交互分析 -> 导出结果”的顺序说明当前版本的使用方法，并逐一解释主界面中可见的按钮和交互方式。
+This guide covers installation, startup, dataset preparation, loading, interactive analysis, path matching, chart operations, and export behavior.
 
-## 1. 目录内容
+## 1. Package Contents
 
 ```text
-Github_Version/
+TopoTunnelMiner_UI/
 |-- README.md
-|-- TopoTunnelMiner_Pipeline/
-`-- TopoTunnelMiner_UI/
-    |-- README.md
-    |-- requirements.txt
-    |-- __main__.py
-    |-- app/                 # 主窗口、控件和表格模型
-    |-- core/                # 筛选、比较、状态和导出逻辑
-    |-- db/                  # SQLite/PKL数据访问层
-    |-- vis/                 # VTK/PyVista三维视图和pyqtgraph图表
-    |-- scripts/import_data.py
-    |-- resources/theme.qss
-    `-- database/            # 空目录，可放用户自己的数据
+|-- requirements.txt
+|-- __main__.py
+|-- app/                 # Main window, widgets, and table models
+|-- core/                # State, comparison, filtering, and export logic
+|-- db/                  # SQLite and PKL data-access layers
+|-- vis/                 # VTK/PyVista views and pyqtgraph charts
+|-- scripts/import_data.py
+|-- resources/theme.qss
+`-- database/            # Empty runtime directory for optional imports
 ```
 
-实验数据和CYP3A4复现案例不包含在GitHub代码仓库中，可从项目Zenodo记录（`https://zenodo.org/records/21287445`）单独下载。下载后的数据集可以放在任意可写目录，并通过`Add Dataset`加载。
+Experimental datasets and the CYP3A4 reproduction case are not included in the GitHub source repository. They can be downloaded from `https://zenodo.org/records/21287445` and loaded from any writable directory.
 
-### 1.1 源码文件索引
+### 1.1 Source File Index
 
-| 文件 | 作用 |
+| File | Purpose |
 |---|---|
-| `__main__.py` | 命令行启动入口，配置Qt运行环境、加载主题、解析可选数据库参数并创建主窗口。 |
-| `app/main_window.py` | 主窗口和应用级交互协调器，连接数据集、路径表、三维视图、图表、匹配和残基分析。 |
-| `app/models/path_model.py` | Qt路径表数据模型，负责列值、排序和表格显示。 |
-| `app/widgets/dataset_panel.py` | 数据集树、添加/移除数据集、前缀、颜色、簇显示和参考结构控件。 |
-| `app/widgets/path_panel.py` | 路径表、路径类别、选择、显示、排除和导出控件。 |
-| `app/widgets/protein_viewer_panel.py` | Residue Observer的双结构视图、帧导航和残基高亮。 |
-| `app/widgets/residue_panel.py` | 单残基筛选与残基属性控件。 |
-| `app/widgets/residue_compare_panel.py` | 两数据集残基统计比较表和热图入口。 |
-| `app/widgets/residue_combination_panel.py` | 残基对/组合比较、筛选、constraint-based matching及结果联动。 |
-| `core/state.py` | 当前数据集、路径选择、过滤和可见状态的共享状态模型。 |
-| `core/exporter.py` | 选中路径和路径类别的PDB导出逻辑。 |
-| `core/residue_compare.py` | 单残基统计读取、对齐和跨数据集差值计算。 |
-| `core/residue_combination.py` | 残基对与高阶组合统计、筛选和比较计算。 |
-| `db/tunnel_db.py` | 单个SQLite数据集的查询接口。 |
-| `db/pkl_tunnel_db.py` | 旧版PKL数据集的兼容读取接口。 |
-| `db/multi_dataset_db.py` | 多数据集统一编号、查询和合并访问层。 |
-| `scripts/import_data.py` | 将预处理PKL转换为UI可读取的SQLite数据库。 |
-| `vis/tunnel_viewer.py` | PyVista/VTK主三维隧道视图、路径拾取和图层渲染。 |
-| `vis/lasso.py` | 屏幕空间套索绘制和路径/点选择。 |
-| `vis/charts.py` | 同步路径剖面图和统计图表。 |
-| `vis/protein_model.py` | PDB蛋白结构解析、对齐和模型几何构建。 |
-| `vis/cartoon_ribbon.py` | Cartoon/ribbon蛋白显示几何。 |
-| `vis/residue_display.py` | 残基位置、标签、高亮和组合标记渲染。 |
-| `vis/binding_surface.py` | 结合位点表面的构建与显示。 |
-| `vis/pse_parser.py` | PyMOL PSE会话中蛋白和非蛋白对象的读取辅助。 |
-| `resources/theme.qss` | Qt界面主题、控件尺寸和颜色样式。 |
-| `requirements.txt` | UI运行所需Python依赖。 |
-| `__init__.py`及子目录中的`__init__.py` | Python包标记和必要的包级导出。 |
+| `__main__.py` | Command-line entry point; configures Qt, loads the theme, resolves an optional database path, and creates the main window. |
+| `app/main_window.py` | Main-window coordinator connecting datasets, path tables, the 3D viewer, charts, matching, and residue analysis. |
+| `app/models/path_model.py` | Qt model for path-table values, sorting, and display. |
+| `app/widgets/dataset_panel.py` | Dataset tree, dataset management, prefixes, colors, cluster visibility, and reference-structure controls. |
+| `app/widgets/path_panel.py` | Path table, path categories, selection, visibility, exclusion, and export controls. |
+| `app/widgets/protein_viewer_panel.py` | Dual-structure Residue Observer, frame navigation, and residue highlighting. |
+| `app/widgets/residue_panel.py` | Single-residue filters and residue-property controls. |
+| `app/widgets/residue_compare_panel.py` | Cross-dataset residue-statistics table and heatmap entry point. |
+| `app/widgets/residue_combination_panel.py` | Residue-pair and motif comparison, filtering, constraint-based matching, and result linking. |
+| `core/state.py` | Shared model for datasets, path selections, filters, and visibility state. |
+| `core/exporter.py` | PDB export for selected paths and path categories. |
+| `core/residue_compare.py` | Loading, alignment, and difference calculation for single-residue statistics. |
+| `core/residue_combination.py` | Calculation and filtering of residue-pair and higher-order combination statistics. |
+| `db/tunnel_db.py` | Query interface for one SQLite tunnel dataset. |
+| `db/pkl_tunnel_db.py` | Compatibility reader for legacy PKL datasets. |
+| `db/multi_dataset_db.py` | Unified indexing and query layer for multiple datasets. |
+| `scripts/import_data.py` | Converts a preprocessed PKL file to a UI-readable SQLite database. |
+| `vis/tunnel_viewer.py` | Main PyVista/VTK tunnel view, path picking, and layer rendering. |
+| `vis/lasso.py` | Screen-space lasso drawing and path/point selection. |
+| `vis/charts.py` | Synchronized path profiles and statistics charts. |
+| `vis/protein_model.py` | PDB parsing, alignment, and protein-model geometry. |
+| `vis/cartoon_ribbon.py` | Cartoon and ribbon protein geometry. |
+| `vis/residue_display.py` | Residue positions, labels, highlights, and combination markers. |
+| `vis/binding_surface.py` | Construction and display of binding-site surfaces. |
+| `vis/pse_parser.py` | Helper for reading protein and non-protein objects from PyMOL PSE sessions. |
+| `resources/theme.qss` | Qt theme, widget dimensions, and color styles. |
+| `requirements.txt` | Python dependencies required by the UI. |
+| `__init__.py` files | Python package markers and package-level exports. |
 
-## 2. 系统要求
+## 2. System Requirements
 
-- Windows 10/11，推荐64位系统。
-- Python 3.10或3.11。建议使用标准CPython创建独立虚拟环境。
-- 显卡和驱动应支持OpenGL 3.2或更高版本，以正常显示VTK三维视图。
-- 推荐至少8 GB内存；加载大型多数据集时建议16 GB或更多。
-- 建议显示分辨率不低于1920 x 1080。程序窗口最低尺寸为1200 x 800。
+- Windows 10 or 11, 64-bit recommended.
+- Python 3.10 or 3.11. Standard CPython in an isolated virtual environment is recommended.
+- A graphics driver supporting OpenGL 3.2 or newer for the VTK 3D view.
+- At least 8 GB RAM; 16 GB or more is recommended for large multi-dataset sessions.
+- A display resolution of at least 1920 x 1080 is recommended. The minimum practical window size is 1200 x 800.
 
-不要将程序安装到已有大量Qt依赖的Anaconda基础环境中。不同来源的Qt DLL可能发生冲突，表现为`DLL load failed while importing QtCore/QtWidgets`。独立虚拟环境更容易复现。
+Avoid installing the application into an Anaconda base environment that already contains Qt packages. Conflicting Qt DLLs can cause `DLL load failed while importing QtCore` or `QtWidgets` errors.
 
-## 3. 安装步骤
+## 3. Installation
 
-### 3.1 打开PowerShell并进入项目目录
+### 3.1 Open PowerShell
+
+Run PowerShell and change to the repository root containing `TopoTunnelMiner_UI`:
 
 ```powershell
-cd <path-to-repository>\Github_Version
+cd <path-to-repository>\TopoTunnelMiner
 ```
 
-如果仓库被移动到了其他位置，将上面的路径替换为实际路径。
+If the repository is located elsewhere, replace the path with the actual location.
 
-### 3.2 创建虚拟环境
+### 3.2 Create a Virtual Environment
 
 ```powershell
 py -3.11 -m venv .venv
 ```
 
-如果`py`命令不可用，可使用Python可执行文件的完整路径：
+If the Python launcher is unavailable, use the full path to Python 3.11:
 
 ```powershell
 C:\Path\To\Python311\python.exe -m venv .venv
 ```
 
-### 3.3 激活虚拟环境
+### 3.3 Activate the Environment
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
 ```
 
-激活后，命令行前通常会出现`(.venv)`。如果PowerShell阻止执行激活脚本，可以不激活，后续命令改用`.\.venv\Scripts\python.exe`。
+If PowerShell blocks activation, leave the environment inactive and use `..venv\Scripts\python.exe` explicitly in the remaining commands.
 
-### 3.4 更新pip并安装依赖
+### 3.4 Install Dependencies
 
 ```powershell
 python -m pip install --upgrade pip
 python -m pip install -r TopoTunnelMiner_UI\requirements.txt
 ```
 
-主要依赖包括：
-
-| 依赖 | 用途 |
+| Dependency | Purpose |
 |---|---|
-| `PySide6` | 桌面界面和Qt事件系统 |
-| `numpy`、`scipy` | 数值计算、插值和几何处理 |
-| `pyvista`、`pyvistaqt`、`vtk` | 隧道、蛋白质和残基的三维显示 |
-| `pyqtgraph` | 路径剖面和统计图表 |
-| `tqdm` | PKL首次转换为SQLite时显示进度 |
+| `PySide6` | Desktop interface and Qt event system. |
+| `numpy`, `scipy` | Numerical calculations, interpolation, and geometry processing. |
+| `pyvista`, `pyvistaqt`, `vtk` | 3D tunnel, protein, and residue visualization. |
+| `pyqtgraph` | Path profiles and statistics charts. |
+| `tqdm` | Progress reporting during first-time PKL-to-SQLite conversion. |
 
-### 3.5 验证安装
+### 3.5 Verify the Installation
 
 ```powershell
 python -c "from PySide6 import QtCore; import numpy, scipy, pyvista, pyvistaqt, vtk, pyqtgraph; print('Environment OK:', QtCore.__version__)"
 ```
 
-如果命令输出`Environment OK`和Qt版本号，运行环境已准备好。
+## 4. Start the Application
 
-## 4. 启动程序
-
-必须从包含`TopoTunnelMiner_UI`目录的仓库根目录运行：
+Run from the repository root:
 
 ```powershell
 python -m TopoTunnelMiner_UI
 ```
 
-启动后出现空白三维视图是正常的，因为应用源码不内置数据。请在左侧`Datasets`标签页使用`Add Dataset`加载外部数据。
+An empty 3D view is expected when no dataset is loaded. Use `Datasets -> Add Dataset` to load an external dataset.
 
-## 5. 数据目录要求
+## 5. Dataset Requirements
 
-### 5.1 最低要求
+### 5.1 Minimum Requirement
 
-每个数据集应放在独立文件夹中，并至少包含以下一种文件：
+Each dataset must be in its own directory and contain either:
 
-- 一个TopoTunnelMiner SQLite数据库，例如`preprocessed_paths.db`、`tunnel_data.db`或其他`.db`文件；或
-- `preprocessed_paths.pkl`，也可以是其他包含预处理路径数据的`.pkl`文件。
+- a TopoTunnelMiner SQLite database such as `preprocessed_paths.db` or `tunnel_data.db`; or
+- a preprocessed PKL file such as `preprocessed_paths.pkl`.
 
-推荐每个文件夹只保留一个主数据库，避免程序递归扫描时选中非目标`.db`文件。
+Keep one primary database in each dataset directory so recursive discovery does not select an unintended database.
 
-当文件夹中只有PKL而没有数据库时，程序会在该数据目录中生成`tunnel_data.db`。因此数据目录必须可写，并需要预留转换后的数据库空间。
+When only a PKL file is present, the application creates `tunnel_data.db` in the dataset directory. The directory must therefore be writable and have enough free space for the converted database.
 
-### 5.2 推荐目录结构
+### 5.2 Recommended Dataset Layout
 
 ```text
 my_dataset/
-|-- preprocessed_paths.db                 # 必需，或使用preprocessed_paths.pkl
-|-- representative_frame.pdb              # 可选，参考蛋白和Residue Observer
-|-- residue_statistics.csv                 # 可选，Residue Compare
-|-- residue_combination_statistics.csv     # 可选，Residue Combination Compare
-|-- residue_pair_distances.npy             # 可选，残基对距离统计
-|-- residue_pair_path_presence_stats.csv   # 可选，路径出现/未出现条件统计
-`-- MD_path.txt                            # 可选，指向逐帧PDB目录
+|-- preprocessed_paths.db                 # Required for direct loading
+|-- representative_frame.pdb              # Optional reference protein
+|-- residue_statistics.csv                # Optional residue comparison data
+|-- residue_combination_statistics.csv    # Optional motif comparison data
+|-- residue_pair_distances.npy            # Optional precomputed distances
+|-- residue_pair_path_presence_stats.csv  # Optional path-presence statistics
+`-- MD_path.txt                            # Optional trajectory location
 ```
 
-`MD_path.txt`的第一条有效非空行应是逐帧PDB目录的绝对路径或相对于`MD_path.txt`的路径，例如：
+The first non-empty line of `MD_path.txt` should contain an absolute path or a path relative to `MD_path.txt` pointing to the frame-level PDB directory.
 
-```text
-D:\Dataset\LinB\wt_cmd_run1_pdb_frames
-```
+### 5.3 Optional Files and Enabled Features
 
-### 5.3 可选文件与功能关系
-
-| 文件 | 启用的功能 |
+| File | Enables |
 |---|---|
-| `.db`或`.pkl` | 路径表、三维隧道、剖面图、帧筛选、路径选择和匹配 |
-| `residue_statistics.csv` | 两数据集残基属性热图和协同残基变化 |
-| `residue_combination_statistics.csv` | 2-4残基组合、残基对/基序比较和三维组合标记 |
-| `representative_frame.pdb` | 参考蛋白显示以及Residue Observer静态结构 |
-| `MD_path.txt`和逐帧PDB | Residue Observer逐帧浏览和局部构象对比 |
-| `residue_pair_distances.npy/.csv` | 预计算残基对距离的快速读取 |
-| `residue_pair_path_presence_stats.csv` | 路径出现与未出现条件下的残基对统计 |
+| `.db` or `.pkl` | Path table, 3D tunnels, profiles, frame filtering, path selection, and matching. |
+| `residue_statistics.csv` | Cross-dataset residue-property heatmaps and cooperative-residue changes. |
+| `residue_combination_statistics.csv` | Two- to four-residue combinations, residue-pair/motif comparison, and 3D combination markers. |
+| `representative_frame.pdb` | Reference-protein display and static Residue Observer structure. |
+| `MD_path.txt` and frame PDBs | Frame-by-frame Residue Observer browsing and local conformational comparison. |
+| `residue_pair_distances.npy` or `.csv` | Fast access to precomputed residue-pair distances. |
+| `residue_pair_path_presence_stats.csv` | Residue-pair statistics conditioned on path presence or absence. |
 
-缺少可选文件不会阻止程序加载主数据库，但对应比较按钮可能保持禁用，或界面显示找不到配套文件。
+Missing optional files do not prevent basic database loading, but the corresponding comparison controls may remain disabled.
 
-## 6. 首次使用流程
+## 6. First Use
 
-1. 启动程序并打开左侧`Datasets`标签页。
-2. 点击`Add Dataset`，选择一个或多个数据集文件夹。
-3. 等待状态栏中的加载进度结束。程序会显示路径总数、残基数和已加载数据集数量。
-4. 在数据集树中选择一个数据集，使用`Show Tunnels`显示其路径。
-5. 在中央三维视图中旋转、平移和缩放，或者点击路径进行选择。
-6. 打开`Paths`标签页查看路径属性，使用Ctrl/Shift选择多个路径。
-7. 点击中央图表上方的`Sync Charts`，加载当前有效路径的剖面与统计图。
-8. 需要跨数据集比较时，再添加第二个数据集并进入`Residue Compare`或`Residue Combination Compare`。
+1. Start the application and open the `Datasets` tab.
+2. Click `Add Dataset` and select one or more dataset directories.
+3. Wait for loading to finish. The status area reports path count, residue count, and loaded dataset count.
+4. Select a dataset and click `Show Tunnels`.
+5. Open the `Paths` tab and use Ctrl/Shift to select multiple rows.
+6. Click `Sync Charts` to load profiles for the current valid paths.
+7. Add a second dataset before using residue comparison or cross-dataset matching.
 
-## 7. 主界面布局
+## 7. Main Window Layout
 
-- **顶部控制区**：路径颜色、差异叠加、入口/出口、蛋白质、帧范围和选择模式。
-- **左侧Control Panel**：`Datasets`、`Paths`、`Residue Compare`和`Residue Combination Compare`四个标签页。
-- **中央三维视图**：隧道、选中路径、残基、入口/出口、蛋白质和组合标记。
-- **右侧Residue Observer**：按需显示两个数据集的局部蛋白质结构和逐帧变化。
-- **底部图表区**：路径剖面图、统计图、同步按钮和独立图表窗口。
-- **状态栏**：显示路径数、残基数、当前选中路径数、加载状态和操作提示。
+- **Top control area:** path color, difference overlays, entry/exit markers, protein display, frame range, and selection mode.
+- **Left Control Panel:** `Datasets`, `Paths`, `Residue Compare`, and `Residue Combination Compare` tabs.
+- **Central 3D view:** tunnels, selected paths, residues, entry/exit points, protein, and combination markers.
+- **Right Residue Observer:** paired local structures and frame-by-frame comparison.
+- **Bottom chart area:** path profiles, statistics, synchronization, and detached chart workspace.
+- **Status bar:** path count, residue count, selected-path count, loading state, and operation messages.
 
-左侧Control Panel右边缘可以拖动以调整宽度。中央三维视图、底部图表和Residue Observer之间的分隔条也可以拖动。
+The right edge of the Control Panel and the separators between the 3D view, charts, and Residue Observer can be dragged to resize the layout.
 
-## 8. 三维视图交互
+## 8. 3D View Interaction
 
-### 8.1 摄像机操作
+### 8.1 Camera and Object Interaction
 
-| 操作 | 效果 |
+| Action | Effect |
 |---|---|
-| 左键拖动 | 旋转三维视图；启用Lasso或按住Shift时改为套索 |
-| 右键拖动 | 平移视图 |
-| 鼠标滚轮 | 放大或缩小 |
-| 左键单击路径 | 选中路径并联动路径表和图表 |
-| 左键单击残基标记 | 选择对应残基 |
-| 左键单击残基组合标记 | 选中组合并联动组合详情/Observer |
-| 悬停残基或组合标记 | 显示标记信息提示 |
+| Left-drag | Rotate the 3D view; becomes lasso selection when lasso mode or Shift is active. |
+| Right-drag | Pan the view. |
+| Mouse wheel | Zoom in or out. |
+| Left-click on a path | Select the path and synchronize the path table and charts. |
+| Left-click on a residue marker | Select the residue. |
+| Left-click on a combination marker | Select the combination and synchronize its details and Observer. |
+| Hover over a residue or combination marker | Show marker information. |
 
-### 8.2 套索选择
+### 8.2 Lasso Selection
 
-| 操作 | 选择模式 |
+| Action | Selection behavior |
 |---|---|
-| `Shift + 左键拖动` | 将套索范围内路径加入当前选择 |
-| `Alt + Shift + 左键拖动` | 从当前选择中移除套索范围内路径 |
-| `Shift + 右键拖动` | 从当前选择中移除套索范围内路径 |
-| 开启`Lasso`后直接左键拖动 | 用套索结果替换当前选择 |
-| `Esc` | 清除当前选择和套索轮廓 |
+| `Shift + left-drag` | Add paths inside the lasso to the current selection. |
+| `Alt + Shift + left-drag` | Remove paths inside the lasso from the current selection. |
+| `Shift + right-drag` | Remove paths inside the lasso from the current selection. |
+| Left-drag with `Lasso` enabled | Replace the current selection with the lasso result. |
+| `Esc` | Clear the selection and lasso outline. |
 
-`Point Select`关闭时，套索按路径中心线进行较精细选择；开启时，套索针对入口/出口点进行较粗粒度选择。
+When `Point Select` is disabled, lasso selection uses the path centerline. When it is enabled, selection targets entry/exit points for coarser selection.
 
-### 8.3 视图内按钮
+### 8.3 View Button
 
-| 按钮 | 作用 |
+| Button | Purpose |
 |---|---|
-| `Current Paths` / `Original Paths` | 在当前处理/映射坐标和原始导出坐标之间切换。加载期间显示`Loading...`。如果数据库没有原始坐标，该模式不可提供完整对比。 |
+| `Current Paths` / `Original Paths` | Switch between processed/mapped coordinates and original exported coordinates. The button shows `Loading...` during loading. Full comparison requires original coordinates in the database. |
 
-## 9. 顶部控制区
+## 9. Top Control Area
 
-### 9.1 路径显示与差异
+### 9.1 Path Display and Difference Overlays
 
-| 控件 | 作用 |
+| Control | Purpose |
 |---|---|
-| `Color`滑块 | 调整背景路径颜色，由浅灰逐渐变为黑色。 |
-| `BG`滑块 | 调整未选中背景路径的透明度。 |
-| `Path Δ` | 按同一路径原始坐标与当前坐标的点位距离着色，红色表示变化较大。 |
-| `Exit Δ` | 按出口到所属簇中心的距离在原始/当前坐标间的变化着色。 |
-| Delta阈值滑块 | 在启用某个Delta叠加后，排除Delta值小于或等于当前阈值的路径。旁边标签显示实际阈值。 |
+| `Color` slider | Adjust background path color from light gray toward black. |
+| `BG` slider | Adjust the opacity of unselected background paths. |
+| `Path Delta` | Color paths by pointwise displacement between original and current coordinates; red indicates larger change. |
+| `Exit Delta` | Color paths by the change in exit-to-cluster-center distance between original and current coordinates. |
+| Delta threshold slider | Hide paths whose enabled Delta value is at or below the threshold. The adjacent label shows the current value. |
 
-Delta叠加需要数据库同时保存当前坐标与原始坐标。`Path Delta`和`Exit Delta`用于不同问题：前者观察整条路径位移，后者侧重出口区域重排。
+`Path Delta` describes displacement along the complete path, whereas `Exit Delta` focuses on exit-region rearrangement. Both require current and original coordinates in the database.
 
-### 9.2 图层和选择
+### 9.2 Layers and Selection
 
-| 按钮 | 作用 |
+| Button | Purpose |
 |---|---|
-| `Residues` | 显示或隐藏残基三维位置。 |
-| `Res Labels` | 显示或隐藏当前选中残基的文字标签。 |
-| `Entry/Exit` | 显示或隐藏入口点和出口点；入口为绿色，出口为红色。 |
-| `EE: All` / `EE: Current` | 切换入口/出口点的范围：全部路径或当前有效路径。 |
-| `Exit Cluster` | 开启后单击一个出口球，选择当前视角和缩放下视觉连通的一组出口。 |
-| `Focus` | 隐藏背景路径，只显示当前选中/有效路径。快捷键为`F`。 |
-| `Point Select` | 在“选择路径”和“选择入口/出口点”两种套索对象之间切换。 |
-| `Lasso` | 开启强制套索模式，普通左键拖动也执行套索。快捷键为`L`。 |
-| `Clear Sel` | 清除当前路径选择。快捷键为`Esc`。 |
+| `Residues` | Show or hide residue positions in the 3D view. |
+| `Res Labels` | Show or hide labels for selected residues. |
+| `Entry/Exit` | Show or hide entry and exit points; entry is green and exit is red. |
+| `EE: All` / `EE: Current` | Show entry/exit points for all paths or only current valid paths. |
+| `Exit Cluster` | After activation, click an exit sphere to select visually connected exits in the current camera view. |
+| `Focus` | Hide background paths and show only selected/valid paths. Shortcut: `F`. |
+| `Point Select` | Switch lasso targets between paths and entry/exit points. |
+| `Lasso` | Force ordinary left-drag to perform lasso selection. Shortcut: `L`. |
+| `Clear Sel` | Clear the current path selection. Shortcut: `Esc`. |
 
-### 9.3 参考蛋白和结合位点
+### 9.3 Reference Protein and Binding Sites
 
-| 控件 | 作用 |
+| Control | Purpose |
 |---|---|
-| `Protein…` | 加载`.pdb`参考蛋白或`.pse` PyMOL会话。PSE中的非蛋白对象可作为结合位点表面显示。 |
-| `Residue Observer` | 显示或隐藏右侧双数据集局部结构观察器。 |
-| `Reference PDB` | 显示或隐藏已加载的参考蛋白。加载前不可用。 |
-| 样式下拉框 | 在`cartoon`、`backbone`、`tube`和`ca_spheres`之间切换。 |
-| 对齐下拉框 | `kabsch`按可用锚点刚体对齐；`translate`仅平移；`none`保留输入坐标。 |
-| Opacity滑块 | 控制参考蛋白透明度。当前版本的主工具栏将该值固定为100%。 |
-| `Clear` | 移除参考蛋白、PSE结合位点和相关缓存。 |
-| `Sites` | 显示或隐藏从PSE载入的结合位点表面；没有位点时不可用。 |
+| `Protein...` | Load a reference `.pdb` or PyMOL `.pse` session. Non-protein PSE objects can be displayed as binding-site surfaces. |
+| `Residue Observer` | Show or hide the right-side paired structure observer. |
+| `Reference PDB` | Show or hide the loaded reference protein; unavailable until a structure is loaded. |
+| Style menu | Select `cartoon`, `backbone`, `tube`, or `ca_spheres`. |
+| Alignment menu | `kabsch` performs rigid alignment using available anchors; `translate` applies translation only; `none` preserves input coordinates. |
+| `Opacity` slider | Control reference-protein opacity. The current main toolbar keeps this value at 100%. |
+| `Clear` | Remove the reference protein, PSE binding sites, and related caches. |
+| `Sites` | Show or hide binding-site surfaces loaded from a PSE session. |
 
-### 9.4 帧范围
+### 9.4 Frame Range
 
-点击`Frame`打开范围菜单：
+Click `Frame` to open the range menu:
 
-| 按钮 | 作用 |
+| Button | Purpose |
 |---|---|
-| `Apply` | 使用输入的最小帧和最大帧筛选路径、三维视图及后续分析。 |
-| `Clear` | 清除帧范围并恢复全部帧。 |
+| `Apply` | Use the entered minimum and maximum frame values to filter paths, the 3D view, and subsequent analyses. |
+| `Clear` | Remove the frame range and restore all frames. |
 
-## 10. Datasets标签页
+## 10. Datasets Tab
 
-数据集树支持Ctrl/Shift多选。展开数据集可以看到CAVER Cluster子项，勾选一个或多个Cluster会将其路径加入当前选择。这里的Cluster是输入数据库中的CAVER空间聚类；`Paths`标签页中的Path Clusters则是用户手动建立的路径类别，两者不要混淆。
+The dataset tree supports Ctrl/Shift multi-selection. Expanding a dataset shows CAVER Cluster entries. Selecting a cluster adds its paths to the current selection. CAVER clusters are input spatial clusters; manual path categories in the `Paths` tab are user-defined groups and should not be confused with them.
 
-| 按钮 | 作用 |
+| Button | Purpose |
 |---|---|
-| `Add Dataset` | 选择一个或多个数据集文件夹。程序递归查找主`.db`或`.pkl`及可选统计文件。 |
-| `Edit Prefix` | 修改数据集在路径表、图表和比较视图中的短前缀。前缀在当前会话内保持唯一。 |
-| `Pick Color` | 设置该数据集在三维视图和图表中的基础颜色。 |
-| `Reference PDB` | 打开PDB/PSE选择器，将结构加载到中央三维视图。 |
-| `Show Tunnels` / `Hide Tunnels` | 显示或隐藏选中的一个或多个数据集隧道。 |
-| `Cluster Colors` / `Uniform Color` | 在按CAVER Cluster分别着色和按数据集统一着色之间切换。 |
-| `Cluster Labels` / `Hide Labels` | 显示或隐藏三维Cluster标签。仅单选一个数据集时操作明确。 |
-| `Remove` | 从当前会话移除选中的数据集，不删除磁盘文件。 |
+| `Add Dataset` | Select one or more dataset directories. The application recursively searches for the main `.db`/`.pkl` and optional statistics files. |
+| `Edit Prefix` | Change the short dataset prefix used in tables, charts, and comparisons. Prefixes remain unique within the session. |
+| `Pick Color` | Set the dataset base color in the 3D view and charts. |
+| `Reference PDB` | Open a PDB/PSE chooser and load a structure into the central 3D view. |
+| `Show Tunnels` / `Hide Tunnels` | Show or hide tunnels from the selected datasets. |
+| `Cluster Colors` / `Uniform Color` | Switch between per-cluster colors and one color per dataset. |
+| `Cluster Labels` / `Hide Labels` | Show or hide 3D cluster labels. The behavior is clearest when one dataset is selected. |
+| `Remove` | Remove selected datasets from the current session without deleting files. |
 
-树中的Cluster复选框用于路径选择，不会删除或重新计算聚类。选择不同数据集还会更新残基和比较控件的数据范围。
+Cluster checkboxes select paths; they do not delete or recompute clusters.
 
-## 11. Paths标签页
+## 11. Paths Tab
 
-路径表列包括`Dataset`、`Path ID`、`Frame`、`Length`、`Min R`、`Avg R`、`Avg Hydro`、`# Residues`和`Cluster`。单击列标题可排序；使用Ctrl/Shift可选择多行。
+The path table includes `Dataset`, `Path ID`, `Frame`, `Length`, `Min R`, `Avg R`, `Avg Hydro`, `# Residues`, and `Cluster`. Click a column heading to sort. Use Ctrl/Shift for multi-row selection.
 
-### 11.1 路径类别按钮
+### 11.1 Path Category Controls
 
-| 按钮 | 作用 |
+| Button | Purpose |
 |---|---|
-| `Create` | 使用表格选中路径创建类别；若表格无选择，则使用当前有效路径或最近匹配路径。名称为空时自动生成时间戳名称。 |
-| `Create From Current` | 从当前选择上下文创建类别，采用与`Create`相同的优先级。 |
-| `Select` | 将当前类别中的路径设为当前选择。 |
-| `Show` / `Hide` | 显示或隐藏当前类别的三维高亮。 |
-| `Select & Show` | 同时选择并显示当前类别。 |
-| `Set Color` | 为当前类别设置三维显示颜色。 |
-| `Show All` | 显示所有手动类别。 |
-| `Hide All` | 隐藏所有手动类别。 |
-| `Excl All` | 将所有类别标记为候选排除集合。 |
-| `Incl All` | 清除所有类别排除状态。 |
-| `Export` | 将当前类别路径导出为PDB。可选择按帧合并或将同帧路径拆分为独立文件。 |
-| `Delete` | 删除当前手动类别，不删除原始路径。 |
-| `Add Selected to Category` | 将路径表中选中的行追加到当前类别并去重。 |
+| `Create` | Create a category from table-selected paths. If no rows are selected, use current valid paths or the most recent matching paths. An empty name receives a timestamp-based name. |
+| `Create From Current` | Create a category from the current selection context. |
+| `Select` | Set paths in the current category as the current selection. |
+| `Show` / `Hide` | Show or hide the category highlight in 3D. |
+| `Select & Show` | Select and show the category together. |
+| `Set Color` | Set the category display color. |
+| `Show All` / `Hide All` | Show or hide all manual categories. |
+| `Excl All` / `Incl All` | Mark all categories as excluded candidates or clear their exclusion state. |
+| `Export` | Export category paths as PDB files, either merged by frame or split into separate files. |
+| `Delete` | Delete the manual category without deleting original paths. |
+| `Add Selected to Category` | Append selected table rows to the current category and remove duplicates. |
 
-类别列表操作：
+Category list actions:
 
-- 单击类别：设为当前类别。
-- 双击类别：切换三维显示。
-- 右键类别：可显示/隐藏、加入/移除候选排除、导出或删除。
-- `[V]`表示可见，`[X]`表示被排除，`[V|X]`表示两种状态同时存在。
+- Single-click a category to make it current.
+- Double-click a category to toggle its 3D visibility.
+- Right-click a category to show/hide, include/exclude, export, or delete it.
+- `[V]` means visible, `[X]` means excluded, and `[V|X]` means both states apply.
 
-### 11.2 路径表视图按钮
+### 11.2 Path Table Views
 
-| 控件 | 作用 |
+| Control | Purpose |
 |---|---|
-| `All Paths` | 显示满足当前帧/残基筛选的全部路径。 |
-| `Selected (N)` | 切换到当前有效路径或可见类别路径的专用视图。 |
-| `Load Selected` | 在`Selected`页中真正加载当前选择，并将其发送到剖面图。 |
+| `All Paths` | Show all paths satisfying the current frame and residue filters. |
+| `Selected (N)` | Show the current valid paths or visible category paths. |
+| `Load Selected` | Load the current selection in the `Selected` view and send it to the profile chart. |
 
-## 12. Residue Compare标签页
+## 12. Residue Compare Tab
 
-该标签页要求两个数据集都提供`residue_statistics.csv`。File B减File A为正时显示红色，为负时显示蓝色，接近零时显示白色。
+This tab requires both datasets to provide `residue_statistics.csv`. Positive File B minus File A differences are shown in red; negative differences are blue; values near zero are white.
 
-| 控件/按钮 | 作用 |
+| Control | Purpose |
 |---|---|
-| `File A`、`File B` | 选择要比较的两个已加载数据集。 |
-| `Reload` | 清除当前联动残基选择并刷新由选择状态驱动的视图；更换File A或File B时会自动重新读取相应CSV。 |
-| `Open Heatmap` | 在独立窗口中打开更大的残基变化热图。 |
-| 热图窗口`Close` | 关闭独立热图窗口。 |
+| `File A`, `File B` | Choose the two loaded datasets to compare. |
+| `Reload` | Clear linked residue selection and refresh views driven by the current selection. Changing either file reloads its CSV automatically. |
+| `Open Heatmap` | Open a larger residue-difference heatmap in a separate window. |
+| Heatmap `Close` | Close the separate heatmap window. |
 
-表格可比较Affected Points、Affected Paths、Mean/Min/Max Radius和Cooperative Residues等数值。单击一行会在下方显示该残基的主要变化；单击File A或File B对应单元格可将该数据集中的残基发送到三维选择；协同残基列会显示增加和减少的合作伙伴详情。
+The table compares affected points, affected paths, mean/min/max radius, and cooperative-residue values. Clicking a row shows details below. Clicking a File A or File B cell sends the residue to the 3D selection. Cooperative-residue columns show increased and decreased partners.
 
-## 13. Residue Combination Compare标签页
+## 13. Residue Combination Compare Tab
 
-该标签页用于分析2-4个残基形成的组合、残基对和瓶颈基序。至少一个数据集需要`residue_combination_statistics.csv`；跨数据集比较时应同时选择File A和File B。
+This tab analyzes combinations of two to four residues, residue pairs, and bottleneck motifs. At least one dataset must provide `residue_combination_statistics.csv`; cross-dataset comparison requires both File A and File B.
 
-### 13.1 数据、显示和筛选按钮
+### 13.1 Data, Display, and Filter Controls
 
-| 控件/按钮 | 作用 |
+| Control | Purpose |
 |---|---|
-| `File A`、`File B` | 选择一个数据集进行单集分析，或选择两个数据集进行差异比较。 |
-| `Residue 1-4` | 指定需要重点检查的2-4个残基；未使用的槽位保持`-`。 |
-| `Size` | 只显示2、3或4残基组合，或显示全部。 |
-| `Color` | 按Affected Paths、Affected Points、Mean Radius、Path-weighted Radius或Radius Range为组合标记着色。比较模式下使用File B减File A。 |
-| `+ Group` | 新增一个筛选组。每组可选择属性、Increase/Decrease/Neutral趋势和绝对阈值。 |
-| 筛选组`Remove` | 删除该筛选组。 |
-| `Show` | 在中央三维视图显示或隐藏当前可见组合的质心标记。 |
-| `Sel Only` | 只显示包含当前残基选择的组合。 |
-| `Bottleneck` | 只显示当前所选路径瓶颈点处出现的组合。 |
-| `Show AB Res` | 在三维视图中显示当前可见File A/File B组合涉及的全部残基。 |
-| `Clear` | 清空四个残基槽位。 |
-| `Load DS` | 按完整数据集范围加载所选组合CSV。 |
-| `Load Path` | 以当前路径选择为上下文重新计算/加载组合。 |
-| `Refresh` | 刷新当前表格、筛选和显示。 |
-| `Save Table` | 将当前可见组合表保存为CSV。 |
+| `File A`, `File B` | Select one dataset for single-dataset analysis or two datasets for a difference comparison. |
+| `Residue 1-4` | Specify two to four residues of interest; unused slots remain `-`. |
+| `Size` | Show only two-, three-, or four-residue combinations, or show all sizes. |
+| `Color` | Color markers by affected paths, affected points, mean radius, path-weighted radius, or radius range. Comparison mode uses File B minus File A. |
+| `+ Group` | Add a filter group with an attribute, Increase/Decrease/Neutral trend, and absolute threshold. |
+| Filter-group `Remove` | Remove a filter group. |
+| `Show` | Show or hide centroids of visible combinations in the 3D view. |
+| `Sel Only` | Show only combinations containing the current residue selection. |
+| `Bottleneck` | Show only combinations occurring at bottleneck points of the selected paths. |
+| `Show AB Res` | Show all residues involved in visible File A/File B combinations. |
+| `Clear` | Clear the four residue slots. |
+| `Load DS` | Load combinations over the full selected-dataset range. |
+| `Load Path` | Load or recalculate combinations in the context of current path selections. |
+| `Refresh` | Refresh the table, filters, and 3D display. |
+| `Save Table` | Save the currently visible combination table as CSV. |
 
-单击组合表行会更新详细统计；单击存在状态或File A/File B相关单元格会联动三维残基与Residue Observer。开启`Show`后，单击中央三维组合标记也会返回并选中对应表格记录。
+Clicking a combination row updates its details. Clicking presence or File A/File B cells links the selection to the 3D view and Residue Observer. When `Show` is enabled, clicking a 3D combination marker selects the corresponding table record.
 
-### 13.2 Matched Paths按钮
+### 13.2 Matched Paths Controls
 
-| 控件/按钮 | 作用 |
+| Control | Purpose |
 |---|---|
-| `Source` | 在File A/File B中指定源数据集；另一个数据集作为目标。 |
-| `Keep` | 设置`K`保留比例，取值应在0到1之间。 |
-| `Query` | 使用源路径的残基集合、出口区域和路径长度约束检索目标路径。 |
-| `Compare` | 对当前匹配结果计算残基对/组合差异；没有匹配锁定时，直接比较当前File A/File B路径。 |
-| `Reset` | 清除本轮匹配路径和比较结果，恢复普通选择上下文。 |
+| `Source` | Select the source dataset from File A or File B; the other dataset becomes the target. |
+| `Keep` | Set the retention ratio `K`, with values between 0 and 1. |
+| `Query` | Retrieve target paths using the source residue set, exit region, and path-length constraints. |
+| `Compare` | Compare residue-pair and combination statistics for the current matched paths. Without a locked match, compare the current File A/File B selections directly. |
+| `Reset` | Clear the current match and comparison result and restore ordinary selection context. |
 
-执行`Query`前必须：
+Before pressing `Query`:
 
-1. 在File A和File B中选择两个数据集；
-2. 在`Source`中指定源数据集；
-3. 在路径表、CAVER Cluster复选框、三维套索或手动类别中选中源路径；
-4. 设置`Keep`后点击`Query`。
+1. Select two datasets in File A and File B.
+2. Choose the source dataset.
+3. Select source paths in the path table, CAVER Cluster checkboxes, 3D lasso, or a manual category.
+4. Set `Keep` and click `Query`.
 
-`Keep=0.8`时，出口约束保留距离初始出口中心最近的80%源路径并重新计算出口球；长度约束去除最短10%和最长10%，使用中间80%的长度范围；残基约束仍使用全部源路径的残基并集。目标路径只有在出口位于参考出口球内、长度位于保留区间内且其非空残基集合是源残基并集的子集时才会保留。查询完成后，源路径保持选中，匹配到的目标路径被加入选择并在路径表中高亮。
+At `Keep=0.8`, the exit constraint retains the 80% of source paths closest to the initial exit centroid and recomputes the exit region. The length constraint uses the central 80% of the source length distribution. The residue constraint still uses the union of residues from all source paths. A target path is retained only if its exit lies in the reference exit region, its length lies in the retained interval, and its non-empty residue set is a subset of the source residue union. The source paths remain selected and matched target paths are highlighted in the path table.
 
 ## 14. Residue Observer
 
-点击顶部`Residue Observer`显示右侧面板。它包含File A和File B两个蛋白质视图以及中间时间轴。
+Click `Residue Observer` in the top controls to show the right-side panel. It contains two protein views and a shared timeline.
 
-| 控件/按钮 | 作用 |
+| Control | Purpose |
 |---|---|
-| 残基输入框 | 输入逗号分隔的残基编号，例如`72,149`。 |
-| `Apply` | 在两个Observer视图中高亮输入残基。 |
-| 两个`MD Dataset`下拉框 | 分别为上、下视图选择逐帧PDB来源。 |
-| `Model` | 选择Backbone、Cartoon、Tube或CA Spheres。 |
-| `Opacity` | 调整Observer蛋白质透明度。 |
-| `Prev` | 移动到上一帧。 |
-| `Frame`数值框 | 直接跳转到指定帧。 |
-| `Next` | 移动到下一帧。 |
-| `Highlight` | 选择Ball-and-Stick、Sticks或Spheres残基高亮样式。 |
+| Residue input | Enter comma-separated residue numbers, for example `72,149`. |
+| `Apply` | Highlight the entered residues in both Observer views. |
+| Two `MD Dataset` menus | Select frame-level PDB sources for the upper and lower views. |
+| `Model` | Select Backbone, Cartoon, Tube, or CA Spheres. |
+| `Opacity` | Adjust protein opacity. |
+| `Prev` | Move to the previous frame. |
+| `Frame` spin box | Jump directly to a frame. |
+| `Next` | Move to the next frame. |
+| `Highlight` | Select Ball-and-Stick, Sticks, or Spheres residue highlighting. |
 
-单击时间轴可跳转帧。若数据集包含`MD_path.txt`，程序优先从指定逐帧PDB目录建立序列；否则尝试在数据集目录附近寻找PDB。没有逐帧PDB时，Observer仍可使用`representative_frame.pdb`显示静态结构，但Prev/Next会保持禁用。
+Click the timeline to jump to a frame. If `MD_path.txt` is present, the application uses the specified frame directory first. Without frame-level PDBs, the Observer can still show the static `representative_frame.pdb`, but `Prev` and `Next` remain disabled.
 
-## 15. 底部路径图表
+## 15. Bottom Path Charts
 
-路径选择发生变化后，图表不会立即重算。状态文字会提示当前选择数量，需要手动同步。
+Charts do not recompute immediately after every path-selection change. Use `Sync Charts` after changing the selection.
 
-| 按钮 | 作用 |
+| Button | Purpose |
 |---|---|
-| `Sync Charts` | 读取当前可见有效路径的剖面，更新Profile和Statistics图。 |
-| `Chart Window` | 将图表移到独立的大型同步工作区；主窗口底部显示分离提示。 |
+| `Sync Charts` | Read profiles for current valid paths and update the Profile and Statistics charts. |
+| `Chart Window` | Move charts to a separate synchronized workspace. |
 
-### 15.1 Profile图表控件
+### 15.1 Profile Chart Controls
 
-| 控件/按钮 | 作用 |
+| Control | Purpose |
 |---|---|
-| `Controls` | 展开或收起图表控制区。 |
-| `Color` | 按Radius、Hydrophobicity、Frame或Dataset着色。 |
-| `Advanced` | 显示自定义X/Y轴选项。可选Radius、Hydrophobicity、Frame和Path Length。 |
-| `Path Selection` | 开启矩形框选；拖动矩形后选中经过范围的路径。再次点击可关闭。 |
-| `Residue Stats` | 开启点级矩形框选，并统计选中剖面点关联的残基。 |
-| `Opacity` | 调整剖面线透明度。 |
-| `Depth` | 调整颜色深浅/视觉层次。 |
-| 数据集复选框 | 在Chart Workspace中按数据集显示或隐藏曲线，并同步Statistics图。 |
-| `Keep Only` | 仅保留图表框选得到的路径，同时替换主界面当前选择。 |
-| `Exclude` | 从图表和主界面当前选择中移除框选路径。 |
-| `Undo` | 撤销最近一次Keep Only/Exclude；最多保留最近5步图表操作。 |
-| `Clear` | 清除图表矩形选择，不等同于删除数据。 |
+| `Controls` | Expand or collapse chart controls. |
+| `Color` | Color curves by Radius, Hydrophobicity, Frame, or Dataset. |
+| `Advanced` | Show custom X/Y-axis controls. Available variables include Radius, Hydrophobicity, Frame, and Path Length. |
+| `Path Selection` | Enable rectangular selection of paths crossing the selected region. Click again to disable. |
+| `Residue Stats` | Enable point-level rectangular selection and summarize associated residues. |
+| `Opacity` | Adjust profile-line opacity. |
+| `Depth` | Adjust color depth and visual hierarchy. |
+| Dataset checkboxes | Show or hide curves by dataset in the Chart Workspace and synchronize the Statistics chart. |
+| `Keep Only` | Keep only paths selected in the chart and replace the main-window selection. |
+| `Exclude` | Remove chart-selected paths from the chart and main-window selection. |
+| `Undo` | Undo the latest `Keep Only` or `Exclude`; up to five chart operations are retained. |
+| `Clear` | Clear the rectangular chart selection without deleting data. |
 
-图表视图禁用了滚轮缩放，矩形拖动仅在`Path Selection`或`Residue Stats`模式下生效。
+The chart view disables wheel zoom. Rectangular dragging is active only in `Path Selection` or `Residue Stats` mode.
 
-### 15.2 Statistics图
+### 15.2 Statistics Chart
 
-Statistics图根据当前Profile图中的路径显示均值和分位范围，并继承颜色、X/Y轴及数据集筛选。该图主要用于比较路径集合总体趋势，不提供独立的路径选择按钮。
+The Statistics chart displays the mean and quantile range of paths currently shown in the Profile chart. It inherits color, axis, and dataset filters and does not provide independent path-selection controls.
 
-## 16. Chart Workspace按钮
+## 16. Chart Workspace
 
-| 控件/按钮 | 作用 |
+| Control | Purpose |
 |---|---|
-| `Close` | 关闭独立图表窗口，并把图表恢复到主窗口底部。 |
-| Residue Summary的`Path Residues` | 按所选图表路径统计全部路径残基。 |
-| Residue Summary的`Bottleneck` | 仅统计各路径最小半径点的残基。 |
-| Residue Summary的`Compare` | 打开按数据集组织的残基摘要比较热图。 |
-| Path Filter的`Select Filtered` | 按Hydrophobicity和Frame输入范围筛选当前图表路径，并同步主界面选择。 |
-| `Revert` | 恢复应用筛选前的路径选择。 |
-| `Clear` | 清空Hydrophobicity和Frame筛选输入。 |
+| `Close` | Close the detached chart window and restore charts to the bottom of the main window. |
+| Residue Summary `Path Residues` | Summarize all residues in selected chart paths. |
+| Residue Summary `Bottleneck` | Summarize residues at the minimum-radius point of each path. |
+| Residue Summary `Compare` | Open a residue-summary comparison heatmap organized by dataset. |
+| Path Filter `Select Filtered` | Filter chart paths by Hydrophobicity and Frame ranges and synchronize the main selection. |
+| `Revert` | Restore the path selection from before the filter was applied. |
+| `Clear` | Clear Hydrophobicity and Frame filter values. |
 
-## 17. 快捷键汇总
+## 17. Keyboard Shortcuts
 
-| 快捷键 | 作用 |
+| Shortcut | Purpose |
 |---|---|
-| `L` | 开启/关闭强制Lasso模式 |
-| `F` | 开启/关闭Focus模式 |
-| `Esc` | 清除当前选择和未完成的套索轮廓 |
-| `Shift + 左拖` | 套索追加选择 |
-| `Alt + Shift + 左拖` | 套索移除选择 |
-| `Shift + 右拖` | 套索移除选择 |
+| `L` | Toggle forced lasso mode. |
+| `F` | Toggle Focus mode. |
+| `Esc` | Clear the current selection and unfinished lasso outline. |
+| `Shift + left-drag` | Add lasso selection. |
+| `Alt + Shift + left-drag` | Remove lasso selection. |
+| `Shift + right-drag` | Remove lasso selection. |
 
-## 18. 推荐分析工作流
+## 18. Recommended Workflows
 
-### 18.1 单数据集路径检查
+### 18.1 Single-Dataset Path Inspection
 
-1. `Add Dataset`加载数据。
-2. `Show Tunnels`显示路径。
-3. 使用Frame范围或CAVER Cluster复选框缩小范围。
-4. 在三维视图套索选择路径。
-5. 在`Paths`中创建手动类别并设置颜色。
-6. 点击`Sync Charts`查看半径和疏水性剖面。
-7. 使用`Export`导出目标路径PDB。
+1. Load a dataset with `Add Dataset`.
+2. Click `Show Tunnels`.
+3. Narrow the scope with the frame range or CAVER Cluster checkboxes.
+4. Select paths with the 3D lasso.
+5. Create a manual category in `Paths` and set its color.
+6. Click `Sync Charts` to inspect radius and hydrophobicity profiles.
+7. Export selected paths as PDB files.
 
-### 18.2 跨数据集约束匹配
+### 18.2 Cross-Dataset Constraint Matching
 
-1. 加载两个数据集并设置不同Prefix/Color。
-2. 在源数据集中选择目标路径集合。
-3. 打开`Residue Combination Compare`并选择File A/File B。
-4. 设置`Source`和`Keep`，点击`Query`。
-5. 检查状态栏中的源路径数、出口半径、长度范围和目标命中数。
-6. 点击`Compare`计算匹配集合的残基对/组合变化。
-7. 使用`Show`、`Show AB Res`和`Residue Observer`检查局部结构。
+1. Load two datasets and assign distinct prefixes and colors.
+2. Select source paths in the source dataset.
+3. Open `Residue Combination Compare` and select File A and File B.
+4. Set `Source` and `Keep`, then click `Query`.
+5. Inspect source count, exit region, length interval, and target-hit count in the status area.
+6. Click `Compare` to calculate residue-pair and combination differences.
+7. Use `Show`, `Show AB Res`, and `Residue Observer` to inspect local structures.
 
-### 18.3 残基网络变化分析
+### 18.3 Residue-Network Analysis
 
-1. 确保两个数据集都有残基统计和组合统计CSV。
-2. 在`Residue Compare`识别变化明显或合作伙伴发生变化的残基。
-3. 点击对应File A/File B单元格将残基联动到三维视图。
-4. 在`Residue Combination Compare`选择2-4个候选残基。
-5. 使用`Bottleneck`限定瓶颈组合，并用筛选组查看Increase/Decrease。
-6. 在Observer中逐帧检查残基距离和侧链构象。
-7. 使用`Save Table`保存当前组合结果。
+1. Ensure both datasets provide residue and combination statistics CSV files.
+2. Use `Residue Compare` to identify strongly changing residues or partner relationships.
+3. Click File A or File B cells to link residues to the 3D view.
+4. Select two to four candidate residues in `Residue Combination Compare`.
+5. Use `Bottleneck` and Increase/Decrease filter groups to focus on relevant motifs.
+6. Inspect residue distances and side-chain conformations frame by frame in the Observer.
+7. Save the visible combination table with `Save Table`.
 
-## 19. 输出文件
+## 19. Exported Files
 
-- 路径类别导出：PDB文件；拆分模式下额外生成TXT元数据摘要。
-- 残基组合结果：`Save Table`保存当前可见CSV。
-- PKL首次加载：在数据目录生成`tunnel_data.db`。
+- Path-category export produces PDB files; split-by-frame mode also produces text metadata summaries.
+- `Save Table` exports the currently visible residue-combination table as CSV.
+- First-time PKL loading creates `tunnel_data.db` in the dataset directory.
 
-程序中的`Remove`、`Delete`和筛选操作只改变当前会话状态，不会删除原始数据集文件。
+`Remove`, `Delete`, and filtering operations modify only the current UI session. They do not delete original dataset files.
 
-## 20. 常见问题
+## 20. Troubleshooting
 
 ### 20.1 `DLL load failed while importing QtCore/QtWidgets`
 
-通常是Qt DLL冲突。退出Anaconda base环境，使用标准Python 3.10/3.11重新创建`.venv`并安装`requirements.txt`。不要混用conda安装的Qt和pip安装的PySide6。
+This usually indicates conflicting Qt DLLs. Exit the Anaconda base environment, create a clean Python 3.10/3.11 virtual environment, and install `requirements.txt` there. Do not mix conda Qt packages with pip-installed PySide6.
 
-### 20.2 三维区域黑屏或出现OpenGL错误
+### 20.2 Black 3D View or OpenGL Errors
 
-- 更新显卡驱动。
-- 确认OpenGL版本不低于3.2。
-- 尽量在本机桌面会话运行；Windows远程桌面可能无法提供合适的OpenGL上下文。
-- 确认`pyvista`、`pyvistaqt`和`vtk`来自同一虚拟环境。
+- Update the graphics driver.
+- Confirm OpenGL 3.2 or newer.
+- Run in a local desktop session when possible; Windows Remote Desktop may not provide a suitable OpenGL context.
+- Confirm that `pyvista`, `pyvistaqt`, and `vtk` come from the same virtual environment.
 
-### 20.3 图表显示`pyqtgraph not installed`
+### 20.3 `pyqtgraph not installed`
 
 ```powershell
 python -m pip install pyqtgraph
 ```
 
-然后重新启动程序。
+Restart the application afterward.
 
-### 20.4 Add Dataset提示没有找到数据库
+### 20.4 `Add Dataset` Cannot Find a Database
 
-确认所选的是“数据集文件夹”而不是单个文件，并且目录内包含`.db`、`preprocessed_paths.pkl`或其他`.pkl`。检查文件扩展名没有被系统隐藏后误改。
+Select a dataset directory rather than an individual file. Confirm that it contains a `.db`, `preprocessed_paths.pkl`, or another `.pkl` file. Check that file extensions are not hidden or accidentally changed.
 
-### 20.5 PKL首次加载很慢
+### 20.5 PKL Loading Is Slow
 
-程序会将PKL转换为SQLite并创建索引，这是一次性过程。等待状态结束，不要同时重复添加同一目录。后续会优先使用生成的`tunnel_data.db`。
+The application converts PKL to SQLite and creates indexes on the first load. Wait for the operation to finish and do not add the same directory repeatedly. Later loads use the generated `tunnel_data.db`.
 
-### 20.6 Residue Compare或Combination Compare没有数据
+### 20.6 Residue Comparison Has No Data
 
-确认数据集目录包含正确命名的`residue_statistics.csv`和`residue_combination_statistics.csv`，并重新添加数据集。程序在添加时记录这些文件的位置。
+Confirm that the dataset directory contains correctly named `residue_statistics.csv` and `residue_combination_statistics.csv` files, then remove and re-add the dataset.
 
-### 20.7 Residue Observer没有逐帧内容
+### 20.7 Residue Observer Has No Frame Data
 
-检查`MD_path.txt`中的路径是否在当前机器上存在，以及目标目录是否直接或在子目录中包含PDB文件。仅有`representative_frame.pdb`时只能显示静态结构。
+Check that `MD_path.txt` points to a valid directory containing PDB files. With only `representative_frame.pdb`, the Observer can display a static structure but cannot provide frame navigation.
 
-### 20.8 界面控件被压缩或看不全
+### 20.8 Controls Are Compressed or Truncated
 
-- 最大化窗口。
-- 拖动Control Panel右侧窄边调整宽度。
-- 拖动中央/图表或三维/Observer分隔条。
-- 标签页标题过长时使用标签栏两侧滚动按钮。
+- Maximize the window.
+- Drag the right edge of the Control Panel to adjust its width.
+- Drag the separators between the 3D view, charts, and Observer.
+- Use the tab-bar scroll buttons when tab labels do not fit.
