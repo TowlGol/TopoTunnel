@@ -602,7 +602,7 @@ def generate_cartoon_ribbon(
 
     # Parse atoms if not provided
     if atoms is None:
-        from TopoTunnelMiner_UI.vis.protein_model import parse_pdb_atoms
+        from TopoTunnel_UI.vis.protein_model import parse_pdb_atoms
         atoms = parse_pdb_atoms(pdb_path)
 
     if not atoms:

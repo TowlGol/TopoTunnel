@@ -317,7 +317,7 @@ def format_env_literal(field_type: str, value):
 class RunnerGUI:
     def __init__(self, root: tk.Tk):
         self.root = root
-        self.root.title("TopoTunnelMiner Analysis Runner")
+        self.root.title("TopoTunnel Analysis Runner")
         self.default_window_width = 1120
         self.default_window_height = 860
         self.root.geometry(f"{self.default_window_width}x{self.default_window_height}")
@@ -344,7 +344,7 @@ class RunnerGUI:
 
         title = tk.Label(
             self.scrollable_frame,
-            text="TopoTunnelMiner: Tunnel Computation and Topology-Based Mapping onto the Reference Conformation",
+            text="TopoTunnel: Tunnel Computation and Topology-Based Mapping onto the Reference Conformation",
             font=("Microsoft YaHei UI", 15, "bold"),
             anchor="w",
         )
@@ -899,7 +899,7 @@ class RunnerGUI:
         resolved_target = str(target_path.resolve())
         config["PDB_path"] = resolved_target
         self.set_input_value("PDB_path", resolved_target)
-        self.update_env_assignments({"PDB_path": format_env_literal("str", resolved_target)})
+        self.update_config_assignments({"PDB_path": format_env_literal("str", resolved_target)})
         self.enqueue_log(f"[SYNC] PDB_path -> {resolved_target}")
         return time.perf_counter() - start
 

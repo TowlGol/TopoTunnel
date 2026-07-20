@@ -21,15 +21,15 @@ try:
 except ImportError:
     pv = None  # type: ignore[assignment]
 
-from TopoTunnelMiner_UI.vis.cartoon_ribbon import generate_cartoon_ribbon
-from TopoTunnelMiner_UI.vis.protein_model import (
+from TopoTunnel_UI.vis.cartoon_ribbon import generate_cartoon_ribbon
+from TopoTunnel_UI.vis.protein_model import (
     build_backbone_data,
     is_hbond_acceptor_atom,
     is_hbond_donor_atom,
     parse_pdb_text,
     residue_key,
 )
-from TopoTunnelMiner_UI.vis.tunnel_viewer import TunnelViewer3D
+from TopoTunnel_UI.vis.tunnel_viewer import TunnelViewer3D
 
 
 def _extract_first_model_text(pdb_text: str) -> str:

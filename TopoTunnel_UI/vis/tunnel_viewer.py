@@ -22,18 +22,18 @@ except ImportError:
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton, QToolTip
 from PySide6.QtCore import Signal, Qt, QEvent, QPoint
 
-from TopoTunnelMiner_UI.vis.lasso import (
+from TopoTunnel_UI.vis.lasso import (
     LassoOverlay,
     project_points_to_screen,
     points_in_polygon,
 )
-from TopoTunnelMiner_UI.vis.residue_display import (
+from TopoTunnel_UI.vis.residue_display import (
     combination_render_style,
     format_combination_hover_text,
     residue_render_style,
     format_residue_hover_text,
 )
-from TopoTunnelMiner_UI.vis.protein_model import (
+from TopoTunnel_UI.vis.protein_model import (
     parse_pdb_atoms,
     build_backbone_data,
     estimate_alignment,
@@ -42,8 +42,8 @@ from TopoTunnelMiner_UI.vis.protein_model import (
     is_hbond_donor_atom,
     residue_key,
 )
-from TopoTunnelMiner_UI.vis.cartoon_ribbon import generate_cartoon_ribbon
-from TopoTunnelMiner_UI.vis.binding_surface import generate_binding_site_surface
+from TopoTunnel_UI.vis.cartoon_ribbon import generate_cartoon_ribbon
+from TopoTunnel_UI.vis.binding_surface import generate_binding_site_surface
 
 
 class TunnelInteractorStyle(vtk.vtkInteractorStyleTrackballCamera if HAS_VTK else object):

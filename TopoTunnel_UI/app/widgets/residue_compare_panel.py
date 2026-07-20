@@ -26,7 +26,7 @@ from PySide6.QtWidgets import (
     QTextBrowser,
 )
 
-from TopoTunnelMiner_UI.core.residue_compare import (
+from TopoTunnel_UI.core.residue_compare import (
     compare_residue_statistics,
     presence_status_label,
     presence_status_tooltip,

@@ -26,15 +26,15 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, QTimer, QThread, Signal, QObject, QEvent
 from PySide6.QtGui import QAction, QShortcut, QKeySequence, QFontMetrics, QColor, QBrush, QPainter, QPen
 
-from TopoTunnelMiner_UI.app.widgets.residue_panel import ResiduePanel
-from TopoTunnelMiner_UI.app.widgets.path_panel import PathPanel
-from TopoTunnelMiner_UI.app.widgets.dataset_panel import DatasetPanel
-from TopoTunnelMiner_UI.app.widgets.residue_compare_panel import ResidueComparePanel
-from TopoTunnelMiner_UI.app.widgets.residue_combination_panel import ResidueCombinationPanel
-from TopoTunnelMiner_UI.app.widgets.protein_viewer_panel import ProteinViewerPanel
-from TopoTunnelMiner_UI.app.models.path_model import PathTableModel
-from TopoTunnelMiner_UI.db.multi_dataset_db import MultiDatasetDatabase
-from TopoTunnelMiner_UI.core.residue_combination import (
+from TopoTunnel_UI.app.widgets.residue_panel import ResiduePanel
+from TopoTunnel_UI.app.widgets.path_panel import PathPanel
+from TopoTunnel_UI.app.widgets.dataset_panel import DatasetPanel
+from TopoTunnel_UI.app.widgets.residue_compare_panel import ResidueComparePanel
+from TopoTunnel_UI.app.widgets.residue_combination_panel import ResidueCombinationPanel
+from TopoTunnel_UI.app.widgets.protein_viewer_panel import ProteinViewerPanel
+from TopoTunnel_UI.app.models.path_model import PathTableModel
+from TopoTunnel_UI.db.multi_dataset_db import MultiDatasetDatabase
+from TopoTunnel_UI.core.residue_combination import (
     bottleneck_point_indices,
     combination_rows_from_profiles,
     combination_centroid,
@@ -50,11 +50,11 @@ from TopoTunnelMiner_UI.core.residue_combination import (
     trimmed_exit_region_from_path_coords,
     trimmed_length_range,
 )
-from TopoTunnelMiner_UI.core.state import AppState
-from TopoTunnelMiner_UI.core.exporter import export_paths_to_pdb
-from TopoTunnelMiner_UI.vis.tunnel_viewer import TunnelViewer3D
-from TopoTunnelMiner_UI.vis.pse_parser import parse_pse_file, pse_protein_to_pdb_string
-from TopoTunnelMiner_UI.vis.charts import ProfileChart, StatisticsChart
+from TopoTunnel_UI.core.state import AppState
+from TopoTunnel_UI.core.exporter import export_paths_to_pdb
+from TopoTunnel_UI.vis.tunnel_viewer import TunnelViewer3D
+from TopoTunnel_UI.vis.pse_parser import parse_pse_file, pse_protein_to_pdb_string
+from TopoTunnel_UI.vis.charts import ProfileChart, StatisticsChart
 
 
 class DataLoader(QObject):
@@ -1415,7 +1415,7 @@ class MainWindow(QMainWindow):
 
     def __init__(self, db_path: str | None = None):
         super().__init__()
-        self.setWindowTitle("TopoTunnelMiner")
+        self.setWindowTitle("TopoTunnel")
         self.setMinimumSize(1200, 800)
         self.resize(1400, 900)
 
@@ -7790,7 +7790,7 @@ class MainWindow(QMainWindow):
             if diag and self._viewer._protein_model_cache:
                 cache = self._viewer._protein_model_cache
                 backbone = cache.get("backbone_raw", {})
-                from TopoTunnelMiner_UI.vis.protein_model import estimate_alignment
+                from TopoTunnel_UI.vis.protein_model import estimate_alignment
                 anchors = self._build_residue_anchor_map()
                 align_info = estimate_alignment(
                     backbone.get("ca_by_resseq", {}),

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-TopoTunnelMiner Desktop UI - PySide6 Native Application
+TopoTunnel Desktop UI - PySide6 Native Application
 
 Usage:
-    python -m TopoTunnelMiner_UI [db_path_or_pkl]
+    python -m TopoTunnel_UI [db_path_or_pkl]
 """
 import sys
 import os
@@ -68,8 +68,8 @@ def main():
     from PySide6.QtWidgets import QApplication, QMessageBox
 
     app = QApplication(sys.argv)
-    app.setApplicationName("TopoTunnelMiner")
-    app.setOrganizationName("TopoTunnelMiner")
+    app.setApplicationName("TopoTunnel")
+    app.setOrganizationName("TopoTunnel")
 
     load_stylesheet(app)
 
@@ -79,14 +79,14 @@ def main():
         db_path, pkl_path = _resolve_db_path(sys.argv[1])
     if pkl_path:
         print(f"Importing {pkl_path} -> {db_path} ...")
-        from TopoTunnelMiner_UI.scripts.import_data import import_pkl_to_sqlite
+        from TopoTunnel_UI.scripts.import_data import import_pkl_to_sqlite
         import_pkl_to_sqlite(pkl_path, db_path)
 
     if db_path and not os.path.exists(db_path):
         QMessageBox.critical(None, "Error", f"Database not found: {db_path}")
         sys.exit(1)
 
-    from TopoTunnelMiner_UI.app.main_window import MainWindow
+    from TopoTunnel_UI.app.main_window import MainWindow
     window = MainWindow(db_path)
     window.show()
 

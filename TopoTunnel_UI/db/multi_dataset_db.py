@@ -9,8 +9,8 @@ from typing import Dict, List, Optional, Set, Tuple, Union
 
 import numpy as np
 
-from TopoTunnelMiner_UI.db.pkl_tunnel_db import PklTunnelDatabase
-from TopoTunnelMiner_UI.db.tunnel_db import TunnelDatabase
+from TopoTunnel_UI.db.pkl_tunnel_db import PklTunnelDatabase
+from TopoTunnel_UI.db.tunnel_db import TunnelDatabase
 
 
 PATH_ID_BLOCK = 10_000_000
@@ -159,7 +159,7 @@ class MultiDatasetDatabase:
                 return os.path.abspath(candidate)
 
         db_path = os.path.join(pkl_dir, "tunnel_data.db")
-        from TopoTunnelMiner_UI.scripts.import_data import import_pkl_to_sqlite
+        from TopoTunnel_UI.scripts.import_data import import_pkl_to_sqlite
         import_pkl_to_sqlite(abs_path, db_path)
         return os.path.abspath(db_path)
 

@@ -34,7 +34,7 @@ from PySide6.QtWidgets import (
     QStyleOptionViewItem,
 )
 
-from TopoTunnelMiner_UI.core.residue_combination import (
+from TopoTunnel_UI.core.residue_combination import (
     COMBINATION_PROPERTY_OPTIONS,
     all_combination_rows,
     combination_property_trend,
@@ -44,7 +44,7 @@ from TopoTunnelMiner_UI.core.residue_combination import (
     filter_combination_rows_by_keys,
     load_residue_combination_statistics_csv,
 )
-from TopoTunnelMiner_UI.vis.protein_model import parse_pdb_text
+from TopoTunnel_UI.vis.protein_model import parse_pdb_text
 
 
 SORT_OPTIONS = [

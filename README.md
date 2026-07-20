@@ -1,6 +1,6 @@
-# TopoTunnelMiner
+# TopoTunnel
 
-TopoTunnelMiner is a topology-guided processing and visual-analytics framework for mapping and comparing protein tunnels across molecular-dynamics conformations and datasets. It represents tunnel points through their local protein-atom context, projects paths into a shared reference conformation, and supports path-level, residue-level, and residue-network analysis across simulation conditions.
+TopoTunnel is a topology-guided processing and visual-analytics framework for mapping and comparing protein tunnels across molecular-dynamics conformations and datasets. It represents tunnel points through their local protein-atom context, projects paths into a shared reference conformation, and supports path-level, residue-level, and residue-network analysis across simulation conditions.
 
 This GitHub repository contains the source code and documentation only. Experimental datasets and the CYP3A4 reproduction case are distributed separately through Zenodo:
 
@@ -19,11 +19,11 @@ This GitHub repository contains the source code and documentation only. Experime
 ## Repository Structure
 
 ```text
-TopoTunnelMiner/
+TopoTunnel/
 |-- README.md
 |-- .gitignore
 |-- .gitattributes
-|-- TopoTunnelMiner_Pipeline/
+|-- TopoTunnel_Pipeline/
 |   |-- README.md
 |   |-- pipeline_gui.py
 |   |-- pipeline_config.py
@@ -33,7 +33,7 @@ TopoTunnelMiner/
 |   |-- stage_04_build_path_points.py
 |   |-- stage_05_preprocess_dataset.py
 |   `-- supporting Python modules
-`-- TopoTunnelMiner_UI/
+`-- TopoTunnel_UI/
     |-- README.md
     |-- __main__.py
     |-- app/
@@ -45,13 +45,13 @@ TopoTunnelMiner/
 
 | Component | Purpose |
 |---|---|
-| `TopoTunnelMiner_Pipeline` | Converts aligned PDB frames and CAVER tunnel profiles into a UI-loadable topology-mapped dataset. It can optionally run segmented CAVER calculations. |
-| `TopoTunnelMiner_UI` | Desktop application for tunnel visualization, path selection, constraint-based matching, synchronized profiles, and residue-network comparison. |
+| `TopoTunnel_Pipeline` | Converts aligned PDB frames and CAVER tunnel profiles into a UI-loadable topology-mapped dataset. It can optionally run segmented CAVER calculations. |
+| `TopoTunnel_UI` | Desktop application for tunnel visualization, path selection, constraint-based matching, synchronized profiles, and residue-network comparison. |
 
 See the component READMEs for complete parameter and interface documentation:
 
-- [Processing pipeline](TopoTunnelMiner_Pipeline/README.md)
-- [Desktop UI](TopoTunnelMiner_UI/README.md)
+- [Processing pipeline](TopoTunnel_Pipeline/README.md)
+- [Desktop UI](TopoTunnel_UI/README.md)
 
 ## Requirements
 
@@ -66,14 +66,14 @@ See the component READMEs for complete parameter and interface documentation:
 Clone the code repository and create an isolated Python environment:
 
 ```powershell
-git clone https://github.com/TowlGol/TopoTunnelMiner.git
-cd TopoTunnelMiner
+git clone https://github.com/TowlGol/TopoTunnel.git
+cd TopoTunnel
 
 py -3.11 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
-python -m pip install -r TopoTunnelMiner_Pipeline\requirements.txt
-python -m pip install -r TopoTunnelMiner_UI\requirements.txt
+python -m pip install -r TopoTunnel_Pipeline\requirements.txt
+python -m pip install -r TopoTunnel_UI\requirements.txt
 ```
 
 The pipeline and desktop UI can also be installed in separate environments when Qt/VTK dependencies need to be isolated from data-processing dependencies.
@@ -89,7 +89,7 @@ The minimum inputs are:
 Start the processing interface:
 
 ```powershell
-cd TopoTunnelMiner_Pipeline
+cd TopoTunnel_Pipeline
 python pipeline_gui.py
 ```
 
@@ -127,7 +127,7 @@ Only the database is required for basic tunnel display. Keeping all six files to
 Run the application from the repository root:
 
 ```powershell
-python -m TopoTunnelMiner_UI
+python -m TopoTunnel_UI
 ```
 
 Then:
@@ -138,16 +138,16 @@ Then:
 4. Select the dataset and click `Show Tunnels`.
 5. Use the `Paths`, `Residue Compare`, and `Residue Combination Compare` tabs for interactive analysis.
 
-The [UI documentation](TopoTunnelMiner_UI/README.md) describes every button, mouse interaction, matching control, chart, and export operation.
+The [UI documentation](TopoTunnel_UI/README.md) describes every button, mouse interaction, matching control, chart, and export operation.
 
 ## CYP3A4 Reproduction Case
 
 The CYP3A4 structures, CAVER output, and processed topology data are intentionally excluded from GitHub because of their size. Download the data from the Zenodo record and extract it into a separate working directory. One convenient local arrangement is:
 
 ```text
-TopoTunnelMiner/
-|-- TopoTunnelMiner_Pipeline/
-|-- TopoTunnelMiner_UI/
+TopoTunnel/
+|-- TopoTunnel_Pipeline/
+|-- TopoTunnel_UI/
 `-- CYP3A4/                       # local data; ignored by Git
     |-- inputs/
     |   |-- caver_config.txt
@@ -181,7 +181,7 @@ To repeat tunnel detection, provide the CYP3A4 CAVER configuration from the Zeno
 
 ## Data Availability
 
-The Zenodo record contains the processed experimental data used in the TopoTunnelMiner study, including:
+The Zenodo record contains the processed experimental data used in the TopoTunnel study, including:
 
 - LinB WT, Open, and Closed cMD/GaMD analysis outputs;
 - selected LinB structural inputs;

@@ -1,13 +1,13 @@
-# TopoTunnelMiner Desktop UI
+# TopoTunnel Desktop UI
 
-This directory contains the TopoTunnelMiner desktop frontend, including the application entry point, database access layer, three-dimensional visualization, charts, data-import helpers, and theme resources. Experimental databases, PDB trajectories, and analysis CSV files are not included in the source package. Generate them with `TopoTunnelMiner_Pipeline` or download them separately from the project Zenodo record.
+This directory contains the TopoTunnel desktop frontend, including the application entry point, database access layer, three-dimensional visualization, charts, data-import helpers, and theme resources. Experimental databases, PDB trajectories, and analysis CSV files are not included in the source package. Generate them with `TopoTunnel_Pipeline` or download them separately from the project Zenodo record.
 
 This guide covers installation, startup, dataset preparation, loading, interactive analysis, path matching, chart operations, and export behavior.
 
 ## 1. Package Contents
 
 ```text
-TopoTunnelMiner_UI/
+TopoTunnel_UI/
 |-- README.md
 |-- requirements.txt
 |-- __main__.py
@@ -69,10 +69,10 @@ Avoid installing the application into an Anaconda base environment that already 
 
 ### 3.1 Open PowerShell
 
-Run PowerShell and change to the repository root containing `TopoTunnelMiner_UI`:
+Run PowerShell and change to the repository root containing `TopoTunnel_UI`:
 
 ```powershell
-cd <path-to-repository>\TopoTunnelMiner
+cd <path-to-repository>\TopoTunnel
 ```
 
 If the repository is located elsewhere, replace the path with the actual location.
@@ -101,7 +101,7 @@ If PowerShell blocks activation, leave the environment inactive and use `..venv\
 
 ```powershell
 python -m pip install --upgrade pip
-python -m pip install -r TopoTunnelMiner_UI\requirements.txt
+python -m pip install -r TopoTunnel_UI\requirements.txt
 ```
 
 | Dependency | Purpose |
@@ -123,7 +123,7 @@ python -c "from PySide6 import QtCore; import numpy, scipy, pyvista, pyvistaqt, 
 Run from the repository root:
 
 ```powershell
-python -m TopoTunnelMiner_UI
+python -m TopoTunnel_UI
 ```
 
 An empty 3D view is expected when no dataset is loaded. Use `Datasets -> Add Dataset` to load an external dataset.
@@ -134,7 +134,7 @@ An empty 3D view is expected when no dataset is loaded. Use `Datasets -> Add Dat
 
 Each dataset must be in its own directory and contain either:
 
-- a TopoTunnelMiner SQLite database such as `preprocessed_paths.db` or `tunnel_data.db`; or
+- a TopoTunnel SQLite database such as `preprocessed_paths.db` or `tunnel_data.db`; or
 - a preprocessed PKL file such as `preprocessed_paths.pkl`.
 
 Keep one primary database in each dataset directory so recursive discovery does not select an unintended database.

@@ -10,7 +10,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, Signal, QItemSelectionModel
 
-from TopoTunnelMiner_UI.app.models.path_model import PathTableModel, COL_KEYS, COL_WIDTHS
+from TopoTunnel_UI.app.models.path_model import PathTableModel, COL_KEYS, COL_WIDTHS
 
 
 class PathPanel(QWidget):

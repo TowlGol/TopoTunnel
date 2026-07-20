@@ -29,7 +29,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Signal, Qt
 from PySide6.QtGui import QPainter, QLinearGradient, QColor, QFont, QPen, QBrush
 
-from TopoTunnelMiner_UI.core.residue_combination import bottleneck_point_indices
+from TopoTunnel_UI.core.residue_combination import bottleneck_point_indices
 
 
 CHART_PRESET_OPTIONS = [

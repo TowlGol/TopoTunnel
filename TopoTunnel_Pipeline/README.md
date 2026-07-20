@@ -1,6 +1,6 @@
-# TopoTunnelMiner Processing Pipeline
+# TopoTunnel Processing Pipeline
 
-`TopoTunnelMiner_Pipeline` converts molecular-dynamics structures and CAVER tunnel profiles into a dataset that can be loaded directly by `TopoTunnelMiner_UI`.
+`TopoTunnel_Pipeline` converts molecular-dynamics structures and CAVER tunnel profiles into a dataset that can be loaded directly by `TopoTunnel_UI`.
 
 The pipeline supports two entry points:
 
@@ -62,7 +62,7 @@ Requirements:
 - Java and CAVER 3.x only when running stage 01
 
 ```powershell
-cd TopoTunnelMiner_Pipeline
+cd TopoTunnel_Pipeline
 py -3.11 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
@@ -124,7 +124,7 @@ The reference PDB must use residue numbering and atom names compatible with the 
 - Parent directory for generated dataset folders.
 - Result path: `<Output Root>/<Dataset Name>/`.
 - For the external CYP3A4 case, use an independent writable output directory or a local ignored data directory such as `..\CYP3A4`.
-- Do not point it at `TopoTunnelMiner_UI/database`; keeping generated data outside the application source is safer.
+- Do not point it at `TopoTunnel_UI/database`; keeping generated data outside the application source is safer.
 
 ### `Dataset Name`
 
@@ -250,7 +250,7 @@ The CYP3A4 case is not included in this GitHub repository. Download the relevant
 9. Select only **Reference-Conformation Mapping and Dataset Preparation**.
 10. Click `Save Parameters and Run Selected Analysis`.
 
-After completion, load the generated dataset directory with `TopoTunnelMiner_UI -> Datasets -> Add Dataset`.
+After completion, load the generated dataset directory with `TopoTunnel_UI -> Datasets -> Add Dataset`.
 
 ## 9. Output Structure
 
