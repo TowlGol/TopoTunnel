@@ -55,7 +55,13 @@ See the component READMEs for complete parameter and interface documentation:
 
 ## Tutorial Video
 
-[**Tutorial Video for TopoTunnel**](https://youtu.be/kNIT94s-Q9E)
+<p align="center">
+  <a href="https://youtu.be/kNIT94s-Q9E">
+    <img src="https://img.youtube.com/vi/kNIT94s-Q9E/maxresdefault.jpg" alt="Tutorial Video for TopoTunnel" width="800">
+  </a>
+</p>
+
+**[Watch Tutorial Video for TopoTunnel on YouTube](https://youtu.be/kNIT94s-Q9E)**
 
 This video provides a complete walkthrough of TopoTunnel, including the source code, data organization, and use of both the processing pipeline interface and the desktop visualization interface.
 
