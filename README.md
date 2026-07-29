@@ -2,7 +2,7 @@
 
 TopoTunnel is a topology-guided processing and visual-analytics framework for mapping and comparing protein tunnels across molecular-dynamics conformations and datasets. It represents tunnel points through their local protein-atom context, projects paths into a shared reference conformation, and supports path-level, residue-level, and residue-network analysis across simulation conditions.
 
-This GitHub repository contains the source code and documentation only. Experimental datasets and the CYP3A4 reproduction case are distributed separately through Zenodo:
+This GitHub repository contains the source code and documentation only. Experimental datasets are distributed separately through Zenodo:
 
 **Data record:** https://zenodo.org/records/21287445
 
@@ -52,6 +52,12 @@ See the component READMEs for complete parameter and interface documentation:
 
 - [Processing pipeline](TopoTunnel_Pipeline/README.md)
 - [Desktop UI](TopoTunnel_UI/README.md)
+
+## Tutorial Video
+
+[**Tutorial Video for TopoTunnel**](https://youtu.be/kNIT94s-Q9E)
+
+This video provides a complete walkthrough of TopoTunnel, including the source code, data organization, and use of both the processing pipeline interface and the desktop visualization interface.
 
 ## Requirements
 
@@ -140,45 +146,6 @@ Then:
 
 The [UI documentation](TopoTunnel_UI/README.md) describes every button, mouse interaction, matching control, chart, and export operation.
 
-## CYP3A4 Reproduction Case
-
-The CYP3A4 structures, CAVER output, and processed topology data are intentionally excluded from GitHub because of their size. Download the data from the Zenodo record and extract it into a separate working directory. One convenient local arrangement is:
-
-```text
-TopoTunnel/
-|-- TopoTunnel_Pipeline/
-|-- TopoTunnel_UI/
-`-- CYP3A4/                       # local data; ignored by Git
-    |-- inputs/
-    |   |-- caver_config.txt
-    |   `-- pdb_frames/
-    |-- caver_output/
-    `-- ui_dataset/
-```
-
-The exact extraction names in the Zenodo archives may differ. Select the extracted files through the pipeline file dialogs rather than relying on fixed absolute paths.
-
-### Reuse the Deposited CAVER Results
-
-Use the following data roles in the pipeline:
-
-| Pipeline field | External CYP3A4 data |
-|---|---|
-| Aligned MD Frame Directory | Directory containing the 500 aligned CYP3A4 PDB frames |
-| Tunnel-Profile CSV File | Extracted CAVER `analysis/tunnel_profiles.csv` |
-| Reference-Conformation PDB File | Deposited `representative_frame.pdb`, or empty to select it again |
-| Output Root Directory | Any writable analysis directory |
-| Dataset Name | For example, `CYP3A4_ui_dataset` |
-| CPU Workers | Start with `4` or `8` |
-| Excluded Residues | Empty for the deposited case |
-| Mutation Sites | Empty for CYP3A4 |
-
-Select only **Reference-Conformation Mapping and Dataset Preparation**. The generated output directory can then be loaded directly through `Datasets -> Add Dataset` in the desktop UI.
-
-### Recompute CAVER
-
-To repeat tunnel detection, provide the CYP3A4 CAVER configuration from the Zenodo record, select both pipeline analysis modes, and specify a local CAVER 3.x installation. For the 500-frame example, 8 segments, 4 parallel CAVER jobs, and a `2G` Java heap per job provide a practical starting point; adjust concurrency according to available memory.
-
 ## Data Availability
 
 The Zenodo record contains the processed experimental data used in the TopoTunnel study, including:
@@ -186,11 +153,10 @@ The Zenodo record contains the processed experimental data used in the TopoTunne
 - LinB WT, Open, and Closed cMD/GaMD analysis outputs;
 - selected LinB structural inputs;
 - CAVER configuration files;
-- CYP3A4 topology-stability data;
 - residue-exclusion controls; and
 - energy-based matching-validation data.
 
-Experimental data should be cited using the metadata and references provided on the Zenodo record. The original CYP3A4 and LinB simulation studies remain the provenance sources for their respective molecular-dynamics datasets.
+Experimental data should be cited using the metadata and references provided on the Zenodo record. The original simulation studies remain the provenance sources for their respective molecular-dynamics datasets.
 
 ## License
 
@@ -202,4 +168,3 @@ Copyright (c) 2026 Yapeng Liu. All rights reserved. This project is provided for
 - Atom names, atom identities, residue numbering, and chain topology must remain compatible across conformations.
 - Generated datasets should remain outside the application source directories.
 - Existing datasets using the former intermediate names `1.atom_network.csv` and `4.all_points.csv` remain readable; new runs use `atom_network.csv` and `mapped_path_points.csv`.
-- The entire local `CYP3A4` directory is excluded from Git tracking; experimental data are distributed through Zenodo rather than Git LFS.
