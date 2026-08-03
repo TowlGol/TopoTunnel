@@ -38,7 +38,6 @@ from TopoTunnel_UI.core.residue_combination import (
     bottleneck_point_indices,
     combination_rows_from_profiles,
     combination_centroid,
-    combination_keys_from_profiles,
     combination_property_trend,
     combination_property_value,
     compare_combination_row_sets,
@@ -1476,8 +1475,9 @@ class MainWindow(QMainWindow):
         self._chart_operation_history: list[list[int]] = []
         self._statistics_last_rows: list[dict] = []
         self._statistics_last_headers: list[str] = []
-        self._side_dock_min_width = 360
-        self._side_dock_width = 460
+        # Derived from the Datasets tab once the control-panel tabs are built.
+        self._side_dock_min_width = 0
+        self._side_dock_width = 0
 
         # Build UI
         self._build_toolbar()
@@ -3142,9 +3142,6 @@ class MainWindow(QMainWindow):
         dock.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         dock.setAutoFillBackground(True)
         dock.setFeatures(QDockWidget.NoDockWidgetFeatures)
-        dock.setMinimumWidth(int(self._side_dock_min_width))
-        dock.resize(int(self._side_dock_width), dock.height())
-
         tabs = QTabWidget()
         tabs.setObjectName("ControlPanelTabs")
         tabs.setElideMode(Qt.TextElideMode.ElideNone)
@@ -3172,6 +3169,12 @@ class MainWindow(QMainWindow):
         tabs.addTab(self._residue_combination_panel, "Residue Combination Compare")
         self._statistics_panel = None
 
+        dataset_button_row_width = self._dataset_panel.primary_button_row_width()
+        self._side_dock_width = max(1, int(dataset_button_row_width) + 20)
+        self._side_dock_min_width = self._side_dock_width
+        dock.setMinimumWidth(self._side_dock_min_width)
+        dock.resize(self._side_dock_width, dock.height())
+
         dock_container = QWidget()
         dock_container.setObjectName("ControlPanelContainer")
         dock_container.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
@@ -3192,10 +3195,17 @@ class MainWindow(QMainWindow):
         self._side_dock = dock
         self.addDockWidget(Qt.LeftDockWidgetArea, dock)
         self._apply_side_dock_width(self._side_dock_width)
+        QTimer.singleShot(0, self._apply_initial_side_dock_width)
+
+    def _apply_initial_side_dock_width(self):
+        dataset_button_row_width = self._dataset_panel.primary_button_row_width()
+        self._side_dock_width = max(1, int(dataset_button_row_width) + 20)
+        self._side_dock_min_width = self._side_dock_width
+        self._apply_side_dock_width(self._side_dock_width)
 
     def _apply_side_dock_width(self, width: int):
         dock = getattr(self, "_side_dock", None)
-        min_width = int(getattr(self, "_side_dock_min_width", 360))
+        min_width = int(getattr(self, "_side_dock_min_width", 0))
         width_value = max(min_width, int(width))
         if self.width() > 0:
             width_value = min(width_value, max(min_width, int(self.width()) - 220))
@@ -4000,26 +4010,55 @@ class MainWindow(QMainWindow):
     def _manual_update_residue_combination_compare(self, mode: str = "dataset"):
         if not getattr(self, "_residue_combination_panel", None):
             return
+        panel = self._residue_combination_panel
         prefer_explicit_selection = str(mode or "").strip().lower() == "path"
         scope_label = "path" if prefer_explicit_selection else "dataset"
         self._begin_loading(f"Updating residue-combination compare context by {scope_label}...")
         finished = False
+        total_started = time.perf_counter()
+        panel.begin_view_update_batch()
         try:
+            phase_started = time.perf_counter()
             profiles_by_dataset_key = self._refresh_residue_combination_current_paths(
                 prefer_explicit_selection=prefer_explicit_selection,
             )
-            self._refresh_residue_combination_current_bottlenecks(
-                prefer_explicit_selection=prefer_explicit_selection,
-                profiles_by_dataset_key=profiles_by_dataset_key,
-            )
+            current_paths_ms = (time.perf_counter() - phase_started) * 1000.0
+
+            phase_started = time.perf_counter()
+            if panel.current_bottleneck_filter_active():
+                self._refresh_residue_combination_current_bottlenecks(
+                    prefer_explicit_selection=prefer_explicit_selection,
+                    profiles_by_dataset_key=profiles_by_dataset_key,
+                )
+            else:
+                # Bottleneck rows are only needed when that filter is enabled.
+                # Clear stale context so the first toggle requests a fresh load.
+                panel.set_current_bottleneck_combination_keys(set())
+                panel.set_current_bottleneck_combination_rows({}, {})
+            bottlenecks_ms = (time.perf_counter() - phase_started) * 1000.0
             self._refresh_residue_combination_contained_match_status()
+
+            phase_started = time.perf_counter()
             self._sync_residue_combination_observer_frame_distances(profiles_by_dataset_key)
+            distances_ms = (time.perf_counter() - phase_started) * 1000.0
             self._sync_residue_combination_context()
-            self._refresh_residue_combination_markers()
-            self._end_loading(f"Residue Combination Compare updated by {scope_label}", 3000)
+            # All setters above may request a refresh. Defer the actual table
+            # rebuild until the complete path context is ready.
+            panel._refresh_view()
             finished = True
         finally:
-            if not finished:
+            render_started = time.perf_counter()
+            panel.end_view_update_batch()
+            render_ms = (time.perf_counter() - render_started) * 1000.0
+            if finished:
+                total_ms = (time.perf_counter() - total_started) * 1000.0
+                print(
+                    f"[PERF][Load{scope_label.title()}] paths={current_paths_ms:.1f}ms "
+                    f"bottlenecks={bottlenecks_ms:.1f}ms distances={distances_ms:.1f}ms "
+                    f"render={render_ms:.1f}ms total={total_ms:.1f}ms"
+                )
+                self._end_loading(f"Residue Combination Compare updated by {scope_label}", 3000)
+            else:
                 self._end_loading()
 
     def _clear_selection(self):
@@ -6705,25 +6744,19 @@ class MainWindow(QMainWindow):
                     continue
                 profiles = dataset_db.get_path_profiles(local_path_ids)
                 profiles_by_dataset[dataset_key] = list(profiles)
-                combo_keys.update(combination_keys_from_profiles(profiles))
-                rows_by_dataset[dataset_key] = combination_rows_from_profiles(profiles)
-                total_paths_by_dataset[dataset_key] = len({
-                    int(profile.get("pathIndex", profile.get("localPathIndex", -1)) or -1)
-                    for profile in profiles
-                    if int(profile.get("pathIndex", profile.get("localPathIndex", -1)) or -1) > 0
-                })
+                rows = combination_rows_from_profiles(profiles)
+                rows_by_dataset[dataset_key] = rows
+                combo_keys.update(tuple(row.get("residue_ids", ())) for row in rows)
+                total_paths_by_dataset[dataset_key] = len(set(int(path_id) for path_id in local_path_ids))
         elif context_path_ids:
             profiles = self.db.get_path_profiles(list(context_path_ids))
-            combo_keys = combination_keys_from_profiles(profiles)
             primary_key = self.db.primary_dataset_key() if hasattr(self.db, "primary_dataset_key") else ""
             if primary_key:
                 profiles_by_dataset[str(primary_key)] = list(profiles)
-                rows_by_dataset[str(primary_key)] = combination_rows_from_profiles(profiles)
-                total_paths_by_dataset[str(primary_key)] = len({
-                    int(profile.get("pathIndex", profile.get("localPathIndex", -1)) or -1)
-                    for profile in profiles
-                    if int(profile.get("pathIndex", profile.get("localPathIndex", -1)) or -1) > 0
-                })
+                rows = combination_rows_from_profiles(profiles)
+                rows_by_dataset[str(primary_key)] = rows
+                combo_keys = {tuple(row.get("residue_ids", ())) for row in rows}
+                total_paths_by_dataset[str(primary_key)] = len(set(int(path_id) for path_id in context_path_ids))
         self._residue_combination_panel.set_current_path_combination_keys(combo_keys)
         self._residue_combination_panel.set_current_path_combination_rows(
             rows_by_dataset,
@@ -6771,21 +6804,13 @@ class MainWindow(QMainWindow):
                     if cached_profiles is not None
                     else dataset_db.get_path_profiles(local_path_ids)
                 )
-                combo_keys.update(
-                    combination_keys_from_profiles(
-                        profiles,
-                        bottleneck_only=True,
-                    )
-                )
-                rows_by_dataset[dataset_key] = combination_rows_from_profiles(
+                rows = combination_rows_from_profiles(
                     profiles,
                     bottleneck_only=True,
                 )
-                total_paths_by_dataset[dataset_key] = len({
-                    int(profile.get("pathIndex", profile.get("localPathIndex", -1)) or -1)
-                    for profile in profiles
-                    if int(profile.get("pathIndex", profile.get("localPathIndex", -1)) or -1) > 0
-                })
+                rows_by_dataset[dataset_key] = rows
+                combo_keys.update(tuple(row.get("residue_ids", ())) for row in rows)
+                total_paths_by_dataset[dataset_key] = len(set(int(path_id) for path_id in local_path_ids))
         elif context_path_ids:
             primary_key = self.db.primary_dataset_key() if hasattr(self.db, "primary_dataset_key") else ""
             profiles = (
@@ -6793,20 +6818,14 @@ class MainWindow(QMainWindow):
                 if primary_key and primary_key in cached_profiles_by_dataset
                 else self.db.get_path_profiles(list(context_path_ids))
             )
-            combo_keys = combination_keys_from_profiles(
-                profiles,
-                bottleneck_only=True,
-            )
             if primary_key:
-                rows_by_dataset[str(primary_key)] = combination_rows_from_profiles(
+                rows = combination_rows_from_profiles(
                     profiles,
                     bottleneck_only=True,
                 )
-                total_paths_by_dataset[str(primary_key)] = len({
-                    int(profile.get("pathIndex", profile.get("localPathIndex", -1)) or -1)
-                    for profile in profiles
-                    if int(profile.get("pathIndex", profile.get("localPathIndex", -1)) or -1) > 0
-                })
+                rows_by_dataset[str(primary_key)] = rows
+                combo_keys = {tuple(row.get("residue_ids", ())) for row in rows}
+                total_paths_by_dataset[str(primary_key)] = len(set(int(path_id) for path_id in context_path_ids))
         self._residue_combination_panel.set_current_bottleneck_combination_keys(combo_keys)
         self._residue_combination_panel.set_current_bottleneck_combination_rows(
             rows_by_dataset,

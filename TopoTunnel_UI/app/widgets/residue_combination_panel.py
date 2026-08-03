@@ -10,7 +10,7 @@ import os
 
 import numpy as np
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QTimer
 from PySide6.QtGui import QColor, QBrush, QPalette
 from PySide6.QtWidgets import (
     QWidget,
@@ -55,6 +55,7 @@ SORT_OPTIONS = [
 ]
 
 MAX_BULK_DISTANCE_ANNOTATION_ROWS = 800
+DEFERRED_DISTANCE_ANNOTATION_CHUNK_SIZE = 64
 
 
 def _format_float(value: float) -> str:
@@ -191,6 +192,10 @@ class ResidueCombinationPanel(QWidget):
         self._dataset_choices_cache_signature: tuple = ()
         self._current_compare_cache_signature: tuple = ()
         self._csv_selection_dirty = False
+        self._view_update_batch_depth = 0
+        self._view_refresh_pending = False
+        self._distance_annotation_request_id = 0
+        self._deferred_distance_sorting_enabled: bool | None = None
         self._combination_data_cache: OrderedDict[tuple[str, int, int], dict] = OrderedDict()
         self._precomputed_compare_csv_cache: OrderedDict[tuple, tuple[list[dict], str]] = OrderedDict()
         self._dynamic_compare_rows_cache: OrderedDict[tuple, list[dict]] = OrderedDict()
@@ -226,6 +231,7 @@ class ResidueCombinationPanel(QWidget):
                 "frame_paths": {},
                 "combo_present_frames": {},
                 "precomputed_distance_csv_path": "",
+                "precomputed_distance_file_key": None,
                 "precomputed_presence_stats_csv_path": "",
                 "prefer_context_stats": False,
             },
@@ -234,6 +240,7 @@ class ResidueCombinationPanel(QWidget):
                 "frame_paths": {},
                 "combo_present_frames": {},
                 "precomputed_distance_csv_path": "",
+                "precomputed_distance_file_key": None,
                 "precomputed_presence_stats_csv_path": "",
                 "prefer_context_stats": False,
             },
@@ -246,6 +253,9 @@ class ResidueCombinationPanel(QWidget):
         self._precomputed_distance_file_index_cache: OrderedDict[tuple[str, int, int], dict] = OrderedDict()
         self._precomputed_pair_distance_cache: OrderedDict[tuple, tuple[np.ndarray, np.ndarray] | None] = OrderedDict()
         self._precomputed_combo_distance_cache: OrderedDict[tuple, dict] = OrderedDict()
+        # NPY rows are cumulative distances. Cache derived statistics separately
+        # so repeated table refreshes do not rescan the same row.
+        self._precomputed_npy_frame_stats_cache: OrderedDict[tuple, dict] = OrderedDict()
         self._observer_frame_distance_values_cache: OrderedDict[tuple, dict] = OrderedDict()
         self._observer_distance_stats_cache: OrderedDict[tuple, dict] = OrderedDict()
 
@@ -674,11 +684,13 @@ class ResidueCombinationPanel(QWidget):
                     except (TypeError, ValueError):
                         continue
                 combo_present_frames[combo_key] = normalized_frames
+            distance_path = str(payload.get("precomputed_distance_csv_path", "") or "").strip()
             normalized_payload = {
                 "dataset_key": str(payload.get("dataset_key", "") or "").strip(),
                 "frame_paths": frame_paths,
                 "combo_present_frames": combo_present_frames,
-                "precomputed_distance_csv_path": str(payload.get("precomputed_distance_csv_path", "") or "").strip(),
+                "precomputed_distance_csv_path": distance_path,
+                "precomputed_distance_file_key": self._precomputed_csv_cache_key(distance_path),
                 "precomputed_presence_stats_csv_path": str(payload.get("precomputed_presence_stats_csv_path", "") or "").strip(),
                 "prefer_context_stats": bool(payload.get("prefer_context_stats")),
             }
@@ -691,6 +703,7 @@ class ResidueCombinationPanel(QWidget):
         self._observer_frame_distance_values_cache.clear()
         self._precomputed_combo_presence_stats_cache.clear()
         self._precomputed_combo_distance_cache.clear()
+        self._precomputed_npy_frame_stats_cache.clear()
         self._refresh_view()
 
     def clear_observer_frame_distance_inputs(self) -> None:
@@ -700,6 +713,7 @@ class ResidueCombinationPanel(QWidget):
                 "frame_paths": {},
                 "combo_present_frames": {},
                 "precomputed_distance_csv_path": "",
+                "precomputed_distance_file_key": None,
                 "precomputed_presence_stats_csv_path": "",
                 "prefer_context_stats": False,
             }
@@ -707,6 +721,7 @@ class ResidueCombinationPanel(QWidget):
         self._observer_frame_distance_values_cache.clear()
         self._precomputed_combo_presence_stats_cache.clear()
         self._precomputed_combo_distance_cache.clear()
+        self._precomputed_npy_frame_stats_cache.clear()
 
     def _observer_frame_distances_ready(self) -> bool:
         left_inputs = self._observer_frame_distance_inputs.get("left", {})
@@ -761,8 +776,11 @@ class ResidueCombinationPanel(QWidget):
         }
 
     def _precomputed_csv_cache_key(self, csv_path: str) -> tuple[str, int, int] | None:
-        normalized_path = os.path.abspath(str(csv_path or "").strip())
-        if not normalized_path or not os.path.exists(normalized_path):
+        raw_path = str(csv_path or "").strip()
+        if not raw_path:
+            return None
+        normalized_path = os.path.abspath(raw_path)
+        if not os.path.isfile(normalized_path):
             return None
         try:
             stat = os.stat(normalized_path)
@@ -843,7 +861,7 @@ class ResidueCombinationPanel(QWidget):
         stats_data = self._precomputed_presence_stats(csv_path)
         if not stats_data:
             return None
-        pair_stats_map = dict(stats_data.get("pair_stats", {}) or {})
+        pair_stats_map = stats_data.get("pair_stats", {}) or {}
         pair_stats = []
         missing_pairs = 0
         for idx, rid_a in enumerate(residue_ids[:-1]):
@@ -1011,24 +1029,24 @@ class ResidueCombinationPanel(QWidget):
             return None, 0
         prefix = np.asarray(prefix_values, dtype=np.float64)
         ids = np.asarray(frame_ids, dtype=np.int64)
-        if prefix.size <= 0 or ids.size <= 0:
-            return None, 0
         count = min(int(prefix.size), int(ids.size))
+        if count <= 0:
+            return None, 0
         prefix = prefix[:count]
         ids = ids[:count]
-        index_by_frame = {int(frame): idx for idx, frame in enumerate(ids.tolist())}
-        total = 0.0
-        n = 0
-        for frame in frames:
-            idx = index_by_frame.get(int(frame))
-            if idx is None:
-                continue
-            value = float(prefix[idx])
-            if idx > 0:
-                value -= float(prefix[idx - 1])
-            total += value
-            n += 1
-        return (total / n if n else None), n
+        requested = np.asarray(tuple(frames), dtype=np.int64)
+        indices = np.searchsorted(ids, requested, side="left")
+        in_range = indices < count
+        if not np.any(in_range):
+            return None, 0
+        indices = indices[in_range]
+        requested = requested[in_range]
+        exact_match = ids[indices] == requested
+        if not np.any(exact_match):
+            return None, 0
+        frame_values = np.diff(prefix, prepend=0.0)
+        selected = frame_values[indices[exact_match]]
+        return float(np.mean(selected)), int(selected.size)
 
     def _precomputed_npy_frame_distance_stats(
         self,
@@ -1038,33 +1056,77 @@ class ResidueCombinationPanel(QWidget):
     ) -> dict | None:
         inputs = self._observer_frame_distance_inputs.get(side, {})
         path = str(inputs.get("precomputed_distance_csv_path", "") or "").strip()
-        indexed = self._precomputed_distance_file_index(path)
+        file_key = inputs.get("precomputed_distance_file_key")
+        if file_key is None:
+            file_key = self._precomputed_csv_cache_key(path)
+        if file_key is None:
+            return None
+        normalized_residue_ids = tuple(int(item) for item in residue_ids)
+        normalized_present_frames = tuple(sorted(int(frame) for frame in present_frames))
+        cache_key = (
+            side,
+            str(inputs.get("dataset_key", "") or "").strip(),
+            file_key,
+            normalized_residue_ids,
+            normalized_present_frames,
+        )
+        cached = self._precomputed_npy_frame_stats_cache.get(cache_key)
+        if cached is not None:
+            self._precomputed_npy_frame_stats_cache.move_to_end(cache_key)
+            return dict(cached)
+
+        indexed = self._precomputed_distance_file_index_cache.get(file_key)
+        if indexed is None:
+            indexed = self._precomputed_distance_file_index(path)
         if not indexed or indexed.get("kind") != "npy":
             return None
-        row_index = dict(indexed.get("combo_rows", {}) or {}).get(tuple(int(item) for item in residue_ids))
+        combo_rows = indexed.get("combo_rows", {}) or {}
+        row_index = combo_rows.get(normalized_residue_ids)
         values = indexed.get("values")
         frame_ids = np.asarray(indexed.get("frame_ids", []), dtype=np.int64)
         if row_index is None or values is None or frame_ids.size <= 0:
             return None
         try:
-            prefix_row = np.asarray(values[int(row_index), :int(frame_ids.size)], dtype=np.float32)
+            # Keep the memory-mapped array lazy until this exact row is needed.
+            prefix_row = np.asarray(
+                values[int(row_index), :int(frame_ids.size)],
+                dtype=np.float64,
+            )
         except Exception:
             return None
-        all_frames = {int(frame) for frame in frame_ids.tolist()}
-        present = {int(frame) for frame in present_frames if int(frame) in all_frames}
-        absent = all_frames.difference(present)
-        present_mean, present_n = self._prefix_mean_for_frames(prefix_row, frame_ids, present)
-        absent_mean, absent_n = self._prefix_mean_for_frames(prefix_row, frame_ids, absent)
-        return {
+
+        # The NPY contains cumulative sums. Derive all per-frame values once,
+        # then split them with a vectorized mask instead of Python frame loops.
+        frame_values = np.diff(prefix_row, prepend=0.0)
+        if normalized_present_frames:
+            present_mask = np.isin(
+                frame_ids,
+                np.asarray(normalized_present_frames, dtype=np.int64),
+                assume_unique=True,
+            )
+        else:
+            present_mask = np.zeros(frame_ids.shape, dtype=bool)
+        present_values = frame_values[present_mask]
+        absent_values = frame_values[~present_mask]
+        present_mean = float(np.mean(present_values)) if present_values.size else None
+        absent_mean = float(np.mean(absent_values)) if absent_values.size else None
+        result = {
             "present": present_mean,
             "absent": absent_mean,
             "present_mean": present_mean,
             "absent_mean": absent_mean,
-            "present_n": present_n,
-            "absent_n": absent_n,
+            "present_n": int(present_values.size),
+            "absent_n": int(absent_values.size),
             "missing_frames": 0,
             "status": "precomputed_npy_prefix_mean",
         }
+        self._precomputed_npy_frame_stats_cache[cache_key] = dict(result)
+        self._precomputed_npy_frame_stats_cache.move_to_end(cache_key)
+        # A typical dataset has about 15k combinations per side. Retaining one
+        # complete two-dataset pass prevents LRU thrashing on the next refresh.
+        while len(self._precomputed_npy_frame_stats_cache) > 32768:
+            self._precomputed_npy_frame_stats_cache.popitem(last=False)
+        return result
 
     def _precomputed_pair_distances(
         self,
@@ -1139,7 +1201,9 @@ class ResidueCombinationPanel(QWidget):
     def _precomputed_combo_distance_values(self, side: str, residue_ids: tuple[int, ...]) -> dict | None:
         inputs = self._observer_frame_distance_inputs.get(side, {})
         csv_path = str(inputs.get("precomputed_distance_csv_path", "") or "").strip()
-        file_key = self._precomputed_csv_cache_key(csv_path)
+        file_key = inputs.get("precomputed_distance_file_key")
+        if file_key is None:
+            file_key = self._precomputed_csv_cache_key(csv_path)
         if file_key is None:
             return None
         dataset_key = str(inputs.get("dataset_key", "") or "").strip()
@@ -1149,9 +1213,12 @@ class ResidueCombinationPanel(QWidget):
             self._precomputed_combo_distance_cache.move_to_end(cache_key)
             return dict(cached)
 
-        indexed = self._precomputed_distance_file_index(csv_path)
+        indexed = self._precomputed_distance_file_index_cache.get(file_key)
+        if indexed is None:
+            indexed = self._precomputed_distance_file_index(csv_path)
         if indexed and indexed.get("kind") == "npy":
-            row_index = dict(indexed.get("combo_rows", {}) or {}).get(tuple(int(item) for item in residue_ids))
+            combo_rows = indexed.get("combo_rows", {}) or {}
+            row_index = combo_rows.get(tuple(int(item) for item in residue_ids))
             values = indexed.get("values")
             frame_ids = np.asarray(indexed.get("frame_ids", []), dtype=np.int64)
             if row_index is not None and values is not None and frame_ids.size > 0:
@@ -1325,7 +1392,7 @@ class ResidueCombinationPanel(QWidget):
 
     def _observer_input_cache_signature(self, side: str) -> tuple:
         inputs = self._observer_frame_distance_inputs.get(side, {})
-        frame_paths = dict(inputs.get("frame_paths", {}) or {})
+        frame_paths = inputs.get("frame_paths", {}) or {}
         frame_signature = tuple(
             sorted(
                 (int(frame), self._normalized_path(path))
@@ -1348,7 +1415,7 @@ class ResidueCombinationPanel(QWidget):
             return precomputed
 
         inputs = self._observer_frame_distance_inputs.get(side, {})
-        frame_paths = dict(inputs.get("frame_paths", {}) or {})
+        frame_paths = inputs.get("frame_paths", {}) or {}
         frame_signature = tuple(sorted((int(frame), str(path)) for frame, path in frame_paths.items()))
         cache_key = (side, self._observer_input_cache_signature(side), residue_ids)
         cached = self._observer_frame_distance_values_cache.get(cache_key)
@@ -1382,7 +1449,7 @@ class ResidueCombinationPanel(QWidget):
 
     def _frame_distance_stats_for_side(self, side: str, residue_ids: tuple[int, ...]) -> dict:
         inputs = self._observer_frame_distance_inputs.get(side, {})
-        combo_present_frames = dict(inputs.get("combo_present_frames", {}) or {})
+        combo_present_frames = inputs.get("combo_present_frames", {}) or {}
         present_frames = set(int(frame) for frame in combo_present_frames.get(residue_ids, set()) or set())
         prefer_context_stats = bool(inputs.get("prefer_context_stats"))
         allow_precomputed_presence = (
@@ -1462,6 +1529,66 @@ class ResidueCombinationPanel(QWidget):
     def _set_empty_compare_distance_sums(self, rows: list[dict]) -> None:
         for row in rows:
             row.setdefault("metrics", {})["residue_pair_distance_sum"] = self._empty_frame_distance_metric()
+
+    def _bulk_presence_stats_available(self) -> bool:
+        if not self._observer_presence_stats_ready():
+            return False
+        return not any(
+            bool(self._observer_frame_distance_inputs.get(side, {}).get("prefer_context_stats"))
+            for side in ("left", "right")
+        )
+
+    def _cancel_deferred_distance_annotation(self) -> None:
+        self._distance_annotation_request_id += 1
+        if self._deferred_distance_sorting_enabled is not None:
+            self._table.setSortingEnabled(self._deferred_distance_sorting_enabled)
+            self._deferred_distance_sorting_enabled = None
+
+    def _schedule_deferred_distance_annotation(self) -> None:
+        row_items = [
+            self._table.item(row_idx, 0)
+            for row_idx in range(self._table.rowCount())
+            if self._table.item(row_idx, 0) is not None
+        ]
+        if not row_items:
+            return
+        request_id = self._distance_annotation_request_id
+        self._deferred_distance_sorting_enabled = self._table.isSortingEnabled()
+        self._table.setSortingEnabled(False)
+        QTimer.singleShot(
+            0,
+            lambda: self._run_deferred_distance_annotation(request_id, row_items, 0),
+        )
+
+    def _run_deferred_distance_annotation(
+        self,
+        request_id: int,
+        row_items: list[QTableWidgetItem],
+        start: int,
+    ) -> None:
+        if request_id != self._distance_annotation_request_id:
+            return
+        end = min(len(row_items), start + DEFERRED_DISTANCE_ANNOTATION_CHUNK_SIZE)
+        for item in row_items[start:end]:
+            row_idx = item.row()
+            if row_idx < 0:
+                continue
+            payload = item.data(Qt.UserRole) or {}
+            row = payload.get("row") if isinstance(payload, dict) else None
+            if not isinstance(row, dict):
+                continue
+            self._annotate_compare_distance_sums([row])
+            self._set_compare_distance_cells(row_idx, row)
+        if end < len(row_items):
+            QTimer.singleShot(
+                0,
+                lambda: self._run_deferred_distance_annotation(request_id, row_items, end),
+            )
+            return
+        if self._deferred_distance_sorting_enabled is not None:
+            self._table.setSortingEnabled(self._deferred_distance_sorting_enabled)
+            self._deferred_distance_sorting_enabled = None
+        self._update_detail()
 
     def _sync_csv_dataset_combos(self):
         current_left = str(
@@ -1573,6 +1700,7 @@ class ResidueCombinationPanel(QWidget):
         self._precomputed_distance_file_index_cache.clear()
         self._precomputed_pair_distance_cache.clear()
         self._precomputed_combo_distance_cache.clear()
+        self._precomputed_npy_frame_stats_cache.clear()
         self._observer_frame_distance_values_cache.clear()
         self._observer_distance_stats_cache.clear()
         if include_frame_caches:
@@ -1788,7 +1916,21 @@ class ResidueCombinationPanel(QWidget):
             idx = combo.findData(value)
             combo.setCurrentIndex(idx if idx >= 0 else 0)
 
-    def _reload_csvs(self):
+    def begin_view_update_batch(self) -> None:
+        self._view_update_batch_depth += 1
+
+    def end_view_update_batch(self) -> None:
+        if self._view_update_batch_depth <= 0:
+            return
+        self._view_update_batch_depth -= 1
+        self._flush_pending_view_refresh()
+
+    def _flush_pending_view_refresh(self) -> None:
+        if self._view_update_batch_depth == 0 and self._view_refresh_pending:
+            self._view_refresh_pending = False
+            self._refresh_view()
+
+    def _reload_csvs(self, *, refresh: bool = True):
         previous_signature = self._current_compare_cache_signature
         previous_left_dataset_key = self._left_dataset_key
         previous_right_dataset_key = self._right_dataset_key
@@ -1874,7 +2016,10 @@ class ResidueCombinationPanel(QWidget):
         self._sync_contained_match_state()
         self._sync_current_context_filter_buttons()
         if view_needs_refresh:
-            self._refresh_view()
+            if refresh:
+                self._refresh_view()
+            else:
+                self._view_refresh_pending = True
 
     def _set_current_path_scope_active(self, active: bool) -> bool:
         active = bool(active)
@@ -1889,19 +2034,19 @@ class ResidueCombinationPanel(QWidget):
 
     def _on_load_dataset_clicked(self):
         scope_changed = self._set_loaded_scope_mode("dataset")
-        self._reload_csvs()
+        self._reload_csvs(refresh=False)
         scope_changed = self._set_current_path_scope_active(False) or scope_changed
-        if scope_changed:
-            self._refresh_view()
+        self._view_refresh_pending = self._view_refresh_pending or scope_changed
         self.manual_update_requested.emit("dataset")
+        self._flush_pending_view_refresh()
 
     def _on_load_path_clicked(self):
         scope_changed = self._set_loaded_scope_mode("path")
-        self._reload_csvs()
+        self._reload_csvs(refresh=False)
         scope_changed = self._set_current_path_scope_active(True) or scope_changed
-        if scope_changed:
-            self._refresh_view()
+        self._view_refresh_pending = self._view_refresh_pending or scope_changed
         self.manual_update_requested.emit("path")
+        self._flush_pending_view_refresh()
 
     def _sync_current_context_filter_buttons(self):
         enabled = bool(self._left_data or self._right_data)
@@ -2413,6 +2558,11 @@ class ResidueCombinationPanel(QWidget):
         self._refresh_view()
 
     def _refresh_view(self):
+        if self._view_update_batch_depth > 0:
+            self._view_refresh_pending = True
+            return
+        self._view_refresh_pending = False
+        self._cancel_deferred_distance_annotation()
         selected = self._selected_residue_ids()
         self._sync_filter_button_state(selected)
         self._sync_filter_group_state()
@@ -2577,6 +2727,35 @@ class ResidueCombinationPanel(QWidget):
         finally:
             self._table.setUpdatesEnabled(True)
 
+    def _set_compare_distance_cells(self, row_idx: int, row: dict) -> None:
+        distance_metric = row.get("metrics", {}).get("residue_pair_distance_sum", {})
+        for col_idx, key, label in (
+            (6, "left_present", "File A present"),
+            (7, "left_absent", "File A absent"),
+            (8, "right_present", "File B present"),
+            (9, "right_absent", "File B absent"),
+        ):
+            value = distance_metric.get(key)
+            numeric_value = float(value) if value is not None else 0.0
+            item = _SortableTableWidgetItem(
+                _format_float(numeric_value) if value is not None else "-",
+                sort_value=numeric_value,
+            )
+            item.setTextAlignment(Qt.AlignCenter)
+            side = "right" if key.startswith("right") else "left"
+            state = "present" if key.endswith("present") else "absent"
+            sample_count = int(distance_metric.get(f"{side}_{state}_n", 0) or 0)
+            missing_frames = int(distance_metric.get(f"{side}_missing_frames", 0) or 0)
+            status = str(distance_metric.get(f"{side}_status", "") or "")
+            item.setToolTip(
+                f"{label} distance mean: "
+                f"{_format_float(numeric_value) if value is not None else 'n/a'}\n"
+                f"Frame samples: {sample_count}\n"
+                f"Skipped frames: {missing_frames}\n"
+                f"Status: {status or 'ok'}"
+            )
+            self._table.setItem(row_idx, col_idx, item)
+
     def _populate_compare_rows(
         self,
         selected: list[int],
@@ -2626,15 +2805,17 @@ class ResidueCombinationPanel(QWidget):
         rows = self._apply_size_filter(rows)
         rows = self._apply_filter_groups(rows, compare_mode=True)
         rows = self._sort_compare_rows(rows)
+        defer_distance_annotation = False
         should_annotate_distances = not used_precomputed_compare or not all(
             row.get("_precomputed_distance_metric") for row in rows
         )
         if (
             should_annotate_distances
             and len(rows) > MAX_BULK_DISTANCE_ANNOTATION_ROWS
-            and not self._observer_presence_stats_ready()
+            and not self._bulk_presence_stats_available()
         ):
             self._set_empty_compare_distance_sums(rows)
+            defer_distance_annotation = self._observer_frame_distances_ready()
         elif should_annotate_distances:
             self._annotate_compare_distance_sums(rows)
         self._visible_rows = [dict(row) for row in rows]
@@ -2761,39 +2942,15 @@ class ResidueCombinationPanel(QWidget):
                 avg_b_item.setToolTip(f"File B mean radius: {_format_float(avg_metric['right'])}")
                 self._table.setItem(row_idx, 5, avg_b_item)
 
-                distance_metric = row.get("metrics", {}).get("residue_pair_distance_sum", {})
-                for col_idx, key, label in (
-                    (6, "left_present", "File A present"),
-                    (7, "left_absent", "File A absent"),
-                    (8, "right_present", "File B present"),
-                    (9, "right_absent", "File B absent"),
-                ):
-                    value = distance_metric.get(key)
-                    numeric_value = float(value) if value is not None else 0.0
-                    item = _SortableTableWidgetItem(
-                        _format_float(numeric_value) if value is not None else "-",
-                        sort_value=numeric_value,
-                    )
-                    item.setTextAlignment(Qt.AlignCenter)
-                    side = "right" if key.startswith("right") else "left"
-                    state = "present" if key.endswith("present") else "absent"
-                    sample_count = int(distance_metric.get(f"{side}_{state}_n", 0) or 0)
-                    missing_frames = int(distance_metric.get(f"{side}_missing_frames", 0) or 0)
-                    status = str(distance_metric.get(f"{side}_status", "") or "")
-                    item.setToolTip(
-                        f"{label} distance mean: "
-                        f"{_format_float(numeric_value) if value is not None else 'n/a'}\n"
-                        f"Frame samples: {sample_count}\n"
-                        f"Skipped frames: {missing_frames}\n"
-                        f"Status: {status or 'ok'}"
-                    )
-                    self._table.setItem(row_idx, col_idx, item)
+                self._set_compare_distance_cells(row_idx, row)
             self._refresh_compare_presence_widgets()
             self._table.setSortingEnabled(was_sorting)
             self._finish_table(rows)
         finally:
             self._table.setSortingEnabled(was_sorting)
             self._table.setUpdatesEnabled(True)
+        if defer_distance_annotation:
+            self._schedule_deferred_distance_annotation()
 
     def _finish_table(self, rows: list[dict]):
         header = self._table.horizontalHeader()

@@ -121,6 +121,16 @@ class DatasetPanel(QWidget):
 
         self.refresh()
 
+    def primary_button_row_width(self) -> int:
+        """Return the full width required by the four top-row buttons."""
+        self.ensurePolished()
+        margins = self.layout().contentsMargins()
+        return (
+            self._button_row.minimumSize().width()
+            + margins.left()
+            + margins.right()
+        )
+
     def refresh(self):
         current_key = self._current_key()
         selected_keys = self._selected_dataset_keys()
