@@ -7,7 +7,7 @@ import csv
 import math
 import os
 from itertools import combinations
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 
 COMBINATION_PROPERTY_OPTIONS: Tuple[Tuple[str, str], ...] = (
@@ -327,6 +327,16 @@ def residue_set_from_profiles(profiles: Sequence[dict]) -> set[int]:
     for profile in profiles or ():
         residue_ids.update(profile_residue_set(profile))
     return residue_ids
+
+
+def residue_set_jaccard_similarity(left: Iterable[int], right: Iterable[int]) -> float:
+    """Return the Jaccard similarity between two residue-ID sets."""
+    left_ids = {int(value) for value in (left or ()) if int(value) > 0}
+    right_ids = {int(value) for value in (right or ()) if int(value) > 0}
+    union_size = len(left_ids | right_ids)
+    if union_size == 0:
+        return 0.0
+    return len(left_ids & right_ids) / union_size
 
 
 def filter_profiles_by_residue_subset(

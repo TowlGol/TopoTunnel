@@ -21,6 +21,8 @@ from PySide6.QtWidgets import (
     QPushButton,
     QLineEdit,
     QComboBox,
+    QRadioButton,
+    QDoubleSpinBox,
     QTableWidget,
     QTableWidgetItem,
     QHeaderView,
@@ -373,6 +375,14 @@ class ResidueCombinationPanel(QWidget):
         )
         match_row.addWidget(self._contained_match_keep_ratio_edit)
 
+        self._contained_match_single_path_toggle = QRadioButton("Single-path search")
+        self._contained_match_single_path_toggle.setAutoExclusive(False)
+        self._contained_match_single_path_toggle.setToolTip(
+            "Match target paths against exactly one selected source path using residue Jaccard similarity, exit distance, and path length"
+        )
+        self._contained_match_single_path_toggle.toggled.connect(self._sync_contained_match_state)
+        match_row.addWidget(self._contained_match_single_path_toggle)
+
         self._contained_match_query_btn = QPushButton("Query")
         self._contained_match_query_btn.setEnabled(False)
         self._contained_match_query_btn.clicked.connect(self.contained_match_query_requested.emit)
@@ -398,6 +408,39 @@ class ResidueCombinationPanel(QWidget):
         match_row.addWidget(self._contained_match_clear_btn)
         match_row.addStretch()
         match_layout.addLayout(match_row)
+
+        self._contained_match_single_path_row = QWidget()
+        single_path_row = QHBoxLayout(self._contained_match_single_path_row)
+        single_path_row.setContentsMargins(0, 0, 0, 0)
+        single_path_row.setSpacing(6)
+        single_path_row.addWidget(QLabel("Jaccard >"))
+        self._contained_match_jaccard_spin = QDoubleSpinBox()
+        self._contained_match_jaccard_spin.setRange(0.0, 1.0)
+        self._contained_match_jaccard_spin.setDecimals(2)
+        self._contained_match_jaccard_spin.setSingleStep(0.05)
+        self._contained_match_jaccard_spin.setValue(0.5)
+        self._contained_match_jaccard_spin.setFixedWidth(76)
+        self._contained_match_jaccard_spin.setToolTip("Minimum residue-set Jaccard similarity; target paths must be strictly greater")
+        single_path_row.addWidget(self._contained_match_jaccard_spin)
+        single_path_row.addWidget(QLabel("Exit radius (Å)"))
+        self._contained_match_exit_radius_spin = QDoubleSpinBox()
+        self._contained_match_exit_radius_spin.setRange(0.0, 10000.0)
+        self._contained_match_exit_radius_spin.setDecimals(2)
+        self._contained_match_exit_radius_spin.setSingleStep(1.0)
+        self._contained_match_exit_radius_spin.setValue(5.0)
+        self._contained_match_exit_radius_spin.setFixedWidth(86)
+        single_path_row.addWidget(self._contained_match_exit_radius_spin)
+        single_path_row.addWidget(QLabel("Length radius (Å)"))
+        self._contained_match_length_radius_spin = QDoubleSpinBox()
+        self._contained_match_length_radius_spin.setRange(0.0, 100000.0)
+        self._contained_match_length_radius_spin.setDecimals(2)
+        self._contained_match_length_radius_spin.setSingleStep(1.0)
+        self._contained_match_length_radius_spin.setValue(5.0)
+        self._contained_match_length_radius_spin.setFixedWidth(86)
+        single_path_row.addWidget(self._contained_match_length_radius_spin)
+        single_path_row.addStretch()
+        self._contained_match_single_path_row.setVisible(False)
+        match_layout.addWidget(self._contained_match_single_path_row)
 
         tools_block, tools_layout = self._create_flow_block("Selection Tools")
         controls_layout.addWidget(tools_block)
@@ -2414,7 +2457,16 @@ class ResidueCombinationPanel(QWidget):
         enabled = compare_mode and self._contained_match_dataset_combo.count() >= 2
         controls_enabled = enabled and not self._contained_match_busy
         self._contained_match_dataset_combo.setEnabled(controls_enabled)
-        self._contained_match_keep_ratio_edit.setEnabled(controls_enabled)
+        single_path_mode = self._contained_match_single_path_toggle.isChecked()
+        self._contained_match_keep_ratio_edit.setEnabled(controls_enabled and not single_path_mode)
+        self._contained_match_single_path_toggle.setEnabled(controls_enabled)
+        self._contained_match_single_path_row.setVisible(single_path_mode)
+        for spin in (
+            self._contained_match_jaccard_spin,
+            self._contained_match_exit_radius_spin,
+            self._contained_match_length_radius_spin,
+        ):
+            spin.setEnabled(controls_enabled and single_path_mode)
         self._contained_match_query_btn.setEnabled(controls_enabled)
         self._contained_match_query_btn.setText(
             "Working..."
@@ -3273,6 +3325,16 @@ class ResidueCombinationPanel(QWidget):
         normalized = f"{value:.2f}".rstrip("0").rstrip(".")
         self._contained_match_keep_ratio_edit.setText(normalized or "1")
         return value
+
+    def contained_match_single_path_mode(self) -> bool:
+        return self._contained_match_single_path_toggle.isChecked()
+
+    def contained_match_single_path_parameters(self) -> dict:
+        return {
+            "jaccard_threshold": float(self._contained_match_jaccard_spin.value()),
+            "exit_radius": float(self._contained_match_exit_radius_spin.value()),
+            "length_radius": float(self._contained_match_length_radius_spin.value()),
+        }
 
     def selected_size_filter(self) -> int:
         return int(self._size_filter_combo.currentData() or 0)

@@ -46,6 +46,7 @@ from TopoTunnel_UI.core.residue_combination import (
     filter_profiles_by_residue_subset,
     profile_residue_set,
     residue_set_from_profiles,
+    residue_set_jaccard_similarity,
     trimmed_exit_region_from_path_coords,
     trimmed_length_range,
 )
@@ -7192,10 +7193,29 @@ class MainWindow(QMainWindow):
         if not panel.is_compare_mode():
             self._statusbar.showMessage("Load File A and File B before querying matched paths", 3000)
             return
+        source_key = panel.contained_match_source_dataset_key()
+        if not source_key:
+            self._statusbar.showMessage("Select a source dataset first", 3000)
+            return
+        context_path_ids = self._residue_combination_context_path_ids(
+            prefer_explicit_selection=True,
+        )
+        source_path_ids = [
+            int(path_id)
+            for path_id in context_path_ids
+            if getattr(self.db, "get_dataset_key_for_path_id", lambda _path_id: None)(int(path_id)) == source_key
+        ]
+        single_path_mode = panel.contained_match_single_path_mode()
+        if single_path_mode and len(source_path_ids) != 1:
+            QMessageBox.warning(
+                self,
+                "Single-path search",
+                "Select exactly one path in the source dataset before running a single-path search.",
+            )
+            return
         self._begin_loading("Querying matched paths...")
         finished = False
         try:
-            source_key = panel.contained_match_source_dataset_key()
             if not source_key:
                 self._statusbar.showMessage("Select a source dataset first", 3000)
                 return
@@ -7211,14 +7231,6 @@ class MainWindow(QMainWindow):
                 return
             target_key = str(target_candidates[0])
 
-            context_path_ids = self._residue_combination_context_path_ids(
-                prefer_explicit_selection=True,
-            )
-            source_path_ids = [
-                int(path_id)
-                for path_id in context_path_ids
-                if getattr(self.db, "get_dataset_key_for_path_id", lambda _path_id: None)(int(path_id)) == source_key
-            ]
             if not source_path_ids:
                 self._statusbar.showMessage("No paths are currently selected in the source dataset, so matched paths cannot be queried", 3000)
                 return
@@ -7241,23 +7253,6 @@ class MainWindow(QMainWindow):
                 self._statusbar.showMessage("No valid residues were extracted from the source paths, so matched paths cannot be queried", 3000)
                 return
 
-            keep_ratio = panel.contained_match_keep_ratio()
-
-            source_exit_region = trimmed_exit_region_from_path_coords(
-                source_db.get_render_coords(source_local_path_ids),
-                keep_ratio,
-            )
-            if not source_exit_region:
-                self._statusbar.showMessage("No valid exit positions were extracted from the source paths, so matched paths cannot be queried", 3000)
-                return
-            source_length_map = source_db.get_path_length_map(source_local_path_ids)
-            source_length_region = trimmed_length_range(source_length_map, keep_ratio)
-            if not source_length_region:
-                self._statusbar.showMessage("No valid path lengths were extracted from the source paths, so matched paths cannot be queried", 3000)
-                return
-            source_length_min = float(source_length_region["min"])
-            source_length_max = float(source_length_region["max"])
-
             target_local_path_ids = (
                 self.db.get_local_path_ids_for_dataset(
                     target_key,
@@ -7266,19 +7261,76 @@ class MainWindow(QMainWindow):
                 if hasattr(self.db, "get_dataset_path_ids") and hasattr(self.db, "get_local_path_ids_for_dataset")
                 else []
             )
-            target_local_path_ids = filter_path_ids_by_exit_region(
-                target_db.get_render_coords(target_local_path_ids),
-                source_exit_region,
-            )
-            target_length_map = target_db.get_path_length_map(target_local_path_ids)
-            target_local_path_ids = [
-                int(path_id)
-                for path_id, path_length in target_length_map.items()
-                if float(path_length) >= source_length_min and float(path_length) <= source_length_max
-            ]
-            target_local_path_ids.sort()
-            target_profiles = target_db.get_path_profiles(target_local_path_ids)
-            matched_target_profiles = filter_profiles_by_residue_subset(target_profiles, source_residue_ids)
+            if single_path_mode:
+                params = panel.contained_match_single_path_parameters()
+                source_local_path_id = int(source_local_path_ids[0])
+                source_coords = source_db.get_render_coords([source_local_path_id]).get(source_local_path_id)
+                source_lengths = source_db.get_path_length_map([source_local_path_id])
+                source_length = source_lengths.get(source_local_path_id)
+                if source_coords is None or len(source_coords) == 0:
+                    self._statusbar.showMessage("The selected source path has no valid coordinates", 3000)
+                    return
+                if source_length is None:
+                    self._statusbar.showMessage("The selected source path has no valid length", 3000)
+                    return
+
+                source_exit = np.asarray(source_coords[-1], dtype=float)
+                target_length_map = target_db.get_path_length_map(target_local_path_ids)
+                target_local_path_ids = [
+                    int(path_id)
+                    for path_id, path_length in target_length_map.items()
+                    if abs(float(path_length) - float(source_length)) <= params["length_radius"]
+                ]
+                target_local_path_ids.sort()
+                target_coords = target_db.get_render_coords(target_local_path_ids)
+                target_local_path_ids = [
+                    path_id
+                    for path_id in target_local_path_ids
+                    if path_id in target_coords
+                    and len(target_coords[path_id]) > 0
+                    and float(np.linalg.norm(np.asarray(target_coords[path_id][-1], dtype=float) - source_exit))
+                    <= params["exit_radius"]
+                ]
+                target_profiles = target_db.get_path_profiles(target_local_path_ids)
+                matched_target_profiles = []
+                for profile in target_profiles:
+                    target_residue_ids = profile_residue_set(profile)
+                    if not target_residue_ids:
+                        continue
+                    jaccard = residue_set_jaccard_similarity(source_residue_ids, target_residue_ids)
+                    if jaccard > params["jaccard_threshold"]:
+                        matched_profile = dict(profile)
+                        matched_profile["jaccard_similarity"] = jaccard
+                        matched_target_profiles.append(matched_profile)
+            else:
+                keep_ratio = panel.contained_match_keep_ratio()
+                source_exit_region = trimmed_exit_region_from_path_coords(
+                    source_db.get_render_coords(source_local_path_ids),
+                    keep_ratio,
+                )
+                if not source_exit_region:
+                    self._statusbar.showMessage("No valid exit positions were extracted from the source paths, so matched paths cannot be queried", 3000)
+                    return
+                source_length_map = source_db.get_path_length_map(source_local_path_ids)
+                source_length_region = trimmed_length_range(source_length_map, keep_ratio)
+                if not source_length_region:
+                    self._statusbar.showMessage("No valid path lengths were extracted from the source paths, so matched paths cannot be queried", 3000)
+                    return
+                source_length_min = float(source_length_region["min"])
+                source_length_max = float(source_length_region["max"])
+                target_local_path_ids = filter_path_ids_by_exit_region(
+                    target_db.get_render_coords(target_local_path_ids),
+                    source_exit_region,
+                )
+                target_length_map = target_db.get_path_length_map(target_local_path_ids)
+                target_local_path_ids = [
+                    int(path_id)
+                    for path_id, path_length in target_length_map.items()
+                    if float(path_length) >= source_length_min and float(path_length) <= source_length_max
+                ]
+                target_local_path_ids.sort()
+                target_profiles = target_db.get_path_profiles(target_local_path_ids)
+                matched_target_profiles = filter_profiles_by_residue_subset(target_profiles, source_residue_ids)
             matched_target_local_ids = [
                 int(profile.get("pathIndex", profile.get("localPathIndex", -1)) or -1)
                 for profile in matched_target_profiles
@@ -7294,14 +7346,23 @@ class MainWindow(QMainWindow):
             previous_target_path_ids = set(self._contained_match_current_target_path_ids)
             self._contained_match_current_target_key = target_key
             self._contained_match_current_target_path_ids = set(matched_target_global_ids)
-            self._contained_match_last_compare_summary = (
-                f"Match query completed | Source [{source_dataset.get('prefix', source_key)}]: {len(source_profiles)} paths | "
-                f"Keep ratio {keep_ratio:.2f} | "
-                f"Exit radius {float(source_exit_region.get('radius', 0.0)):.3f} | "
-                f"Length range [{source_length_min:.3f}, {source_length_max:.3f}] | "
-                f"Target [{target_dataset.get('prefix', target_key)}] prefiltered: {len(target_profiles)} paths | "
-                f"Residue-matched: {len(matched_target_profiles)} paths"
-            )
+            if single_path_mode:
+                self._contained_match_last_compare_summary = (
+                    f"Single-path query completed | Source [{source_dataset.get('prefix', source_key)}] path {source_local_path_id} | "
+                    f"Jaccard > {params['jaccard_threshold']:.2f} | Exit radius {params['exit_radius']:.2f} Å | "
+                    f"Length radius {params['length_radius']:.2f} Å | "
+                    f"Target [{target_dataset.get('prefix', target_key)}] passed exit/length: {len(target_profiles)} paths | "
+                    f"Residue-matched: {len(matched_target_profiles)} paths"
+                )
+            else:
+                self._contained_match_last_compare_summary = (
+                    f"Match query completed | Source [{source_dataset.get('prefix', source_key)}]: {len(source_profiles)} paths | "
+                    f"Keep ratio {keep_ratio:.2f} | "
+                    f"Exit radius {float(source_exit_region.get('radius', 0.0)):.3f} | "
+                    f"Length range [{source_length_min:.3f}, {source_length_max:.3f}] | "
+                    f"Target [{target_dataset.get('prefix', target_key)}] prefiltered: {len(target_profiles)} paths | "
+                    f"Residue-matched: {len(matched_target_profiles)} paths"
+                )
             self._suppress_next_path_preview = True
             next_selection = set(source_path_ids) | set(matched_target_global_ids)
             if not next_selection:

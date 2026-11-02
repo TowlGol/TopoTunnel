@@ -384,6 +384,10 @@ Clicking a combination row updates its details. Clicking presence or File A/File
 |---|---|
 | `Source` | Select the source dataset from File A or File B; the other dataset becomes the target. |
 | `Keep` | Set the retention ratio `K`, with values between 0 and 1. |
+| `Single-path search` | Switch to a query based on exactly one selected source path. This disables `Keep` and reveals the Jaccard threshold, exit radius, and length radius inputs. Unchecking it hides those inputs and reenables `Keep`. |
+| `Jaccard >` | In single-path mode, require the target path's residue-set Jaccard similarity with the source path to be strictly greater than this threshold (0-1). |
+| `Exit radius (Å)` | In single-path mode, keep targets whose exit endpoint is within this 3D distance of the source path's exit endpoint. |
+| `Length radius (Å)` | In single-path mode, keep targets whose path length differs from the source length by no more than this value. |
 | `Query` | Retrieve target paths using the source residue set, exit region, and path-length constraints. |
 | `Compare` | Compare residue-pair and combination statistics for the current matched paths. Without a locked match, compare the current File A/File B selections directly. |
 | `Reset` | Clear the current match and comparison result and restore ordinary selection context. |
@@ -393,9 +397,27 @@ Before pressing `Query`:
 1. Select two datasets in File A and File B.
 2. Choose the source dataset.
 3. Select source paths in the path table, CAVER Cluster checkboxes, 3D lasso, or a manual category.
-4. Set `Keep` and click `Query`.
+4. For a group query, set `Keep` and click `Query`. For a single-path query, check `Single-path search`, set its three thresholds, select exactly one source path, and click `Query`.
 
 At `Keep=0.8`, the exit constraint retains the 80% of source paths closest to the initial exit centroid and recomputes the exit region. The length constraint uses the central 80% of the source length distribution. The residue constraint still uses the union of residues from all source paths. A target path is retained only if its exit lies in the reference exit region, its length lies in the retained interval, and its non-empty residue set is a subset of the source residue union. The source paths remain selected and matched target paths are highlighted in the path table.
+
+#### Single-path search
+
+This mode finds paths in the other dataset that resemble one selected source path. Select exactly one source path before clicking `Query`; if zero or multiple source paths are selected, the UI displays a warning and does not start the search. `Keep` is disabled because the search uses the three explicit thresholds instead.
+
+For each target path, TopoTunnel builds the set of residue IDs occurring along that path and calculates the Jaccard similarity against the source path's residue set:
+
+```text
+J(source, target) = |source residues ∩ target residues| / |source residues ∪ target residues|
+```
+
+A target path is returned only when all of these conditions hold:
+
+- The Euclidean distance between its exit endpoint and the source path's exit endpoint is less than or equal to `Exit radius (Å)`.
+- Its absolute path-length difference from the source path is less than or equal to `Length radius (Å)`.
+- Its residue-set Jaccard similarity is strictly greater than `Jaccard >`.
+
+The source path remains selected, and matching target paths are added to the selection and highlighted after the query completes.
 
 ## 14. Residue Observer
 
