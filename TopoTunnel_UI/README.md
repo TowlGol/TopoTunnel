@@ -57,7 +57,7 @@ Experimental datasets and the CYP3A4 reproduction case are not included in the G
 
 ## 2. System Requirements
 
-- Windows 10 or 11, 64-bit recommended.
+- Windows 10 or 11 is the primary tested platform, 64-bit recommended. The GUI has also been launched on macOS; complete cross-platform workflow and Linux support have not yet been systematically validated.
 - Python 3.10 or 3.11. Standard CPython in an isolated virtual environment is recommended.
 - A graphics driver supporting OpenGL 3.2 or newer for the VTK 3D view.
 - At least 8 GB RAM; 16 GB or more is recommended for large multi-dataset sessions.
@@ -67,41 +67,55 @@ Avoid installing the application into an Anaconda base environment that already 
 
 ## 3. Installation
 
-### 3.1 Open PowerShell
+### 3.1 Open a terminal
 
-Run PowerShell and change to the repository root containing `TopoTunnel_UI`:
+Open PowerShell on Windows or a shell on macOS/Linux, then change to the repository root containing `TopoTunnel_UI`:
 
-```powershell
-cd <path-to-repository>\TopoTunnel
+```text
+cd <path-to-repository>/TopoTunnel
 ```
 
 If the repository is located elsewhere, replace the path with the actual location.
 
-### 3.2 Create a Virtual Environment
+### 3.2 Install uv and create a virtual environment
+
+Install Astral's `uv` using the [official installation instructions](https://docs.astral.sh/uv/getting-started/installation/). For example:
 
 ```powershell
-py -3.11 -m venv .venv
+# Windows PowerShell
+irm https://astral.sh/uv/install.ps1 | iex
 ```
 
-If the Python launcher is unavailable, use the full path to Python 3.11:
-
-```powershell
-C:\Path\To\Python311\python.exe -m venv .venv
+```bash
+# macOS/Linux
+curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-### 3.3 Activate the Environment
+Then create the environment:
+
+```text
+uv python install 3.11
+uv venv --python 3.11 .venv
+```
+
+Activate it with the command for your shell:
 
 ```powershell
+# Windows PowerShell
 .\.venv\Scripts\Activate.ps1
 ```
 
-If PowerShell blocks activation, leave the environment inactive and use `..venv\Scripts\python.exe` explicitly in the remaining commands.
+```bash
+# macOS/Linux
+source .venv/bin/activate
+```
 
-### 3.4 Install Dependencies
+If PowerShell blocks activation, leave the environment inactive and use the environment's Python executable explicitly.
 
-```powershell
-python -m pip install --upgrade pip
-python -m pip install -r TopoTunnel_UI\requirements.txt
+### 3.3 Install Dependencies
+
+```bash
+uv pip install -r TopoTunnel_UI/requirements.txt
 ```
 
 | Dependency | Purpose |
@@ -112,9 +126,9 @@ python -m pip install -r TopoTunnel_UI\requirements.txt
 | `pyqtgraph` | Path profiles and statistics charts. |
 | `tqdm` | Progress reporting during first-time PKL-to-SQLite conversion. |
 
-### 3.5 Verify the Installation
+### 3.4 Verify the Installation
 
-```powershell
+```bash
 python -c "from PySide6 import QtCore; import numpy, scipy, pyvista, pyvistaqt, vtk, pyqtgraph; print('Environment OK:', QtCore.__version__)"
 ```
 

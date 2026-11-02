@@ -57,25 +57,44 @@ SQLite conversion            |
 
 Requirements:
 
-- Windows 10/11
+- Windows 10/11 is the primary tested platform. The Tkinter GUI and command-line stages may work on macOS/Linux, but the complete pipeline has not yet been systematically validated there.
 - Python 3.10 or 3.11 with Tk support
 - Java and CAVER 3.x only when running stage 01
 
-```powershell
-cd TopoTunnel_Pipeline
-py -3.11 -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
-```
-
-Start the GUI:
+Install Astral's `uv` using the [official installation instructions](https://docs.astral.sh/uv/getting-started/installation/). For example:
 
 ```powershell
-python pipeline_gui.py
+# Windows PowerShell
+irm https://astral.sh/uv/install.ps1 | iex
 ```
 
-Alternatively, double-click `run_gui.bat`.
+```bash
+# macOS/Linux
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+From the repository root, create an isolated environment and install the Pipeline dependencies:
+
+```text
+uv python install 3.11
+uv venv --python 3.11 .venv
+```
+
+Activate it with `.\.venv\Scripts\Activate.ps1` in Windows PowerShell or `source .venv/bin/activate` on macOS/Linux, then run:
+
+```bash
+uv pip install -r TopoTunnel_Pipeline/requirements.txt
+```
+
+The Pipeline GUI uses Tkinter. Confirm that the Python interpreter has Tk support; if the selected interpreter does not, create the environment with a Tk-enabled Python 3.11 interpreter, for example `uv venv --python /path/to/python3.11 .venv`.
+
+Start the GUI from the repository root:
+
+```bash
+python TopoTunnel_Pipeline/pipeline_gui.py
+```
+
+On Windows, `run_gui.bat` is also available as a convenience launcher.
 
 ## 4. Required Inputs
 
@@ -93,6 +112,8 @@ aligned_500.pdb
 ```
 
 All frames must use compatible atom names, residue numbering, and topology. The PDB names recorded in the CAVER tunnel-profile file must match files in this directory exactly.
+
+The directory may contain only one PDB file for a single-structure analysis. Use a frame-like name such as `aligned_1.pdb` when running the optional CAVER stage. The single-structure workflow still requires a matching CAVER tunnel-profile CSV; a PDB alone is not sufficient to create tunnel paths.
 
 ### 4.2 CAVER Tunnel Profiles
 
@@ -116,7 +137,7 @@ The reference PDB must use residue numbering and atom names compatible with the 
 ### `Aligned MD Frame Directory`
 
 - Select the directory containing the frame-level PDB files.
-- Do not select an individual PDB.
+- The GUI expects a directory even for a single-structure analysis; place the one PDB file in its own directory instead of selecting the file directly.
 - External CYP3A4 example: the directory containing the 500 aligned PDB frames downloaded from Zenodo, such as `..\CYP3A4\inputs\pdb_frames` in a local arrangement.
 
 ### `Output Root Directory`
@@ -165,6 +186,10 @@ The reference PDB must use residue numbering and atom names compatible with the 
 - Comma-separated substitutions such as `L176W,F142L` or `LEU176TRP,PHE142LEU`.
 - Leave empty for CYP3A4.
 - This option validates residue identities and supports mutation-aware mapping. It is not a side-chain modeling tool.
+
+### Single-structure limitations
+
+When the input directory contains one PDB and the profile CSV refers to it, stages 03-05 can map and preprocess that conformation. A reference PDB may be supplied explicitly, or the single PDB can be selected as the representative structure. This mode does not provide a meaningful ensemble-level comparison, and the pipeline does not accept standalone force-field topology files such as PSF, PRMTOP, TOP, or TPR in place of PDB coordinates.
 
 ## 6. CAVER Parameters
 

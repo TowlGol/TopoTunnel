@@ -67,28 +67,58 @@ This video provides a complete walkthrough of TopoTunnel, including the source c
 
 ## Requirements
 
-- Windows 10 or 11
+- Windows 10 or 11 is the primary tested platform. The UI has also been launched on macOS; the complete workflow and Linux support have not yet been systematically validated.
 - Python 3.10 or 3.11
+- Tk support for the Pipeline GUI
 - Java and CAVER 3.x only when tunnel profiles must be computed from PDB frames
 - An OpenGL-capable graphics driver for the VTK/PyVista interface
 - At least 8 GB RAM; 16 GB or more is recommended for large datasets
 
 ## Installation
 
-Clone the code repository and create an isolated Python environment:
+Clone the code repository and create an isolated Python environment. The commands below use Astral's `uv`; the two requirement files are installed into the same environment.
+
+Install `uv` using the [official installation instructions](https://docs.astral.sh/uv/getting-started/installation/). For example:
 
 ```powershell
-git clone https://github.com/TowlGol/TopoTunnel.git
-cd TopoTunnel
-
-py -3.11 -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
-python -m pip install -r TopoTunnel_Pipeline\requirements.txt
-python -m pip install -r TopoTunnel_UI\requirements.txt
+# Windows PowerShell
+irm https://astral.sh/uv/install.ps1 | iex
 ```
 
-The pipeline and desktop UI can also be installed in separate environments when Qt/VTK dependencies need to be isolated from data-processing dependencies.
+```bash
+# macOS/Linux
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+Then clone the repository and create the environment:
+
+```text
+git clone https://github.com/TowlGol/TopoTunnel.git
+cd TopoTunnel
+uv python install 3.11
+uv venv --python 3.11 .venv
+```
+
+Activate the environment using the command for your shell:
+
+```powershell
+# Windows PowerShell
+.\.venv\Scripts\Activate.ps1
+```
+
+```bash
+# macOS/Linux
+source .venv/bin/activate
+```
+
+Then install both dependency sets:
+
+```bash
+uv pip install -r TopoTunnel_Pipeline/requirements.txt
+uv pip install -r TopoTunnel_UI/requirements.txt
+```
+
+The Pipeline GUI requires a Python interpreter with Tk support. If the selected Python does not include Tk, create the environment with a Tk-enabled Python 3.11 interpreter (for example, `uv venv --python /path/to/python3.11 .venv`). The pipeline and desktop UI can also be installed in separate environments when Qt/VTK dependencies need to be isolated from data-processing dependencies.
 
 ## Processing Your Own Dataset
 
@@ -108,6 +138,10 @@ python pipeline_gui.py
 Choose **Reference-Conformation Mapping and Dataset Preparation**, provide the aligned-frame directory and tunnel-profile CSV, select an output directory, and run the analysis. If CAVER output is not available, also select **Segmented CAVER Tunnel Computation and Tunnel-Profile Aggregation** and provide the CAVER installation and configuration paths.
 
 The pipeline README explains every input field, parameter, processing stage, and troubleshooting step.
+
+### Single-structure workflow
+
+The pipeline can process one conformation when the input directory contains a single PDB file, for example `aligned_1.pdb`, and the CAVER profile CSV refers to that filename. The GUI still expects a directory, so place the single PDB in its own directory. A PDB file alone does not generate tunnel paths; a matching existing CAVER profile must be supplied, or the optional CAVER stage must be run. Standalone force-field topology formats such as PSF, PRMTOP, TOP, or TPR are not accepted as replacements for the PDB input.
 
 ## Output Dataset
 
