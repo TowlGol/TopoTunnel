@@ -52,7 +52,7 @@ Experimental datasets and the CYP3A4 reproduction case are not included in the G
 | `vis/binding_surface.py` | Construction and display of binding-site surfaces. |
 | `vis/pse_parser.py` | Helper for reading protein and non-protein objects from PyMOL PSE sessions. |
 | `resources/theme.qss` | Qt theme, widget dimensions, and color styles. |
-| `requirements.txt` | Python dependencies required by the UI. |
+| `requirements.txt` | Legacy UI-only dependency list; the repository-root `pyproject.toml` is the source for the unified `uv` environment. |
 | `__init__.py` files | Python package markers and package-level exports. |
 
 ## 2. System Requirements
@@ -69,7 +69,7 @@ Avoid installing the application into an Anaconda base environment that already 
 
 ### 3.1 Open a terminal
 
-Open PowerShell on Windows or a shell on macOS/Linux, then change to the repository root containing `TopoTunnel_UI`:
+Open PowerShell on Windows or a shell on macOS/Linux, then change to the repository root containing `pyproject.toml` and `TopoTunnel_UI`:
 
 ```text
 cd <path-to-repository>/TopoTunnel
@@ -77,7 +77,7 @@ cd <path-to-repository>/TopoTunnel
 
 If the repository is located elsewhere, replace the path with the actual location.
 
-### 3.2 Install uv and create a virtual environment
+### 3.2 Install uv and synchronize the project environment
 
 Install Astral's `uv` using the [official installation instructions](https://docs.astral.sh/uv/getting-started/installation/). For example:
 
@@ -91,32 +91,21 @@ irm https://astral.sh/uv/install.ps1 | iex
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-Then create the environment:
+From the repository root, run one command to create `.venv` and install dependencies for both the UI and Pipeline from the root `pyproject.toml` and `uv.lock`:
 
 ```text
-uv python install 3.11
-uv venv --python 3.11 .venv
+uv sync
 ```
 
-Activate it with the command for your shell:
+Start the UI without activating the environment:
 
-```powershell
-# Windows PowerShell
-.\.venv\Scripts\Activate.ps1
+```text
+uv run python -m TopoTunnel_UI
 ```
 
-```bash
-# macOS/Linux
-source .venv/bin/activate
-```
+If you prefer an activated environment, run `\.venv\Scripts\Activate.ps1` on Windows PowerShell or `source .venv/bin/activate` on macOS/Linux after synchronization.
 
-If PowerShell blocks activation, leave the environment inactive and use the environment's Python executable explicitly.
-
-### 3.3 Install Dependencies
-
-```bash
-uv pip install -r TopoTunnel_UI/requirements.txt
-```
+Key packages included in the unified environment:
 
 | Dependency | Purpose |
 |---|---|
@@ -126,10 +115,10 @@ uv pip install -r TopoTunnel_UI/requirements.txt
 | `pyqtgraph` | Path profiles and statistics charts. |
 | `tqdm` | Progress reporting during first-time PKL-to-SQLite conversion. |
 
-### 3.4 Verify the Installation
+### 3.3 Verify the Installation
 
 ```bash
-python -c "from PySide6 import QtCore; import numpy, scipy, pyvista, pyvistaqt, vtk, pyqtgraph; print('Environment OK:', QtCore.__version__)"
+uv run python -c "from PySide6 import QtCore; import numpy, scipy, pyvista, pyvistaqt, vtk, pyqtgraph; print('Environment OK:', QtCore.__version__)"
 ```
 
 ## 4. Start the Application
@@ -137,7 +126,7 @@ python -c "from PySide6 import QtCore; import numpy, scipy, pyvista, pyvistaqt, 
 Run from the repository root:
 
 ```powershell
-python -m TopoTunnel_UI
+uv run python -m TopoTunnel_UI
 ```
 
 An empty 3D view is expected when no dataset is loaded. Use `Datasets -> Add Dataset` to load an external dataset.
@@ -257,7 +246,7 @@ When `Point Select` is disabled, lasso selection uses the path centerline. When 
 |---|---|
 | `Residues` | Show or hide residue positions in the 3D view. |
 | `Res Labels` | Show or hide labels for selected residues. |
-| `Entry/Exit` | Show or hide entry and exit points; entry is green and exit is red. |
+| `Entry/Exit` | Show or hide entry and exit points. Their colors follow the dataset colors and can be set independently with `Select Color`; the adjacent `Size` slider adjusts their displayed sphere size. |
 | `EE: All` / `EE: Current` | Show entry/exit points for all paths or only current valid paths. |
 | `Exit Cluster` | After activation, click an exit sphere to select visually connected exits in the current camera view. |
 | `Focus` | Hide background paths and show only selected/valid paths. Shortcut: `F`. |
@@ -289,13 +278,13 @@ Click `Frame` to open the range menu:
 
 ## 10. Datasets Tab
 
-The dataset tree supports Ctrl/Shift multi-selection. Expanding a dataset shows CAVER Cluster entries. Selecting a cluster adds its paths to the current selection. CAVER clusters are input spatial clusters; manual path categories in the `Paths` tab are user-defined groups and should not be confused with them.
+The dataset tree supports Ctrl/Shift multi-selection. Expanding a dataset shows CAVER Cluster entries and a `Select all clusters` checkbox; selecting it checks every cluster under that dataset and adds all of their paths to the current selection. Adding a dataset preserves the existing path selection and manual categories. CAVER clusters are input spatial clusters; manual path categories in the `Paths` tab are user-defined groups and should not be confused with them.
 
 | Button | Purpose |
 |---|---|
 | `Add Dataset` | Select one or more dataset directories. The application recursively searches for the main `.db`/`.pkl` and optional statistics files. |
 | `Edit Prefix` | Change the short dataset prefix used in tables, charts, and comparisons. Prefixes remain unique within the session. |
-| `Pick Color` | Set the dataset base color in the 3D view and charts. |
+| `Pick Color` | Opens the `Select Color` dialog. Choose whether the selected color applies to Start Point, Endpoint, and/or Path; all three are selected by default. |
 | `Reference PDB` | Open a PDB/PSE chooser and load a structure into the central 3D view. |
 | `Show Tunnels` / `Hide Tunnels` | Show or hide tunnels from the selected datasets. |
 | `Cluster Colors` / `Uniform Color` | Switch between per-cluster colors and one color per dataset. |
@@ -335,9 +324,11 @@ Category list actions:
 
 | Control | Purpose |
 |---|---|
-| `All Paths` | Show all paths satisfying the current frame and residue filters. |
-| `Selected (N)` | Show the current valid paths or visible category paths. |
-| `Load Selected` | Load the current selection in the `Selected` view and send it to the profile chart. |
+| `All Paths` | Default view. Show all paths satisfying the current frame and residue filters. |
+| `Selected (N)` | Switch directly to the current table selection, or current valid paths / visible category paths when no table rows are selected. No separate loading step is required. |
+| `Load Profiles` | Send the current selection to the profile chart; this is optional and does not control which paths appear in the table. |
+
+`All Paths` and `Selected` are mutually exclusive table views. Switching between them preserves the current path selection. `Selected` updates when the effective selection or visible categories change, and remains in Selected mode when the table refreshes or a dataset is added. If there is no selection or visible category, the Selected table is empty. Both views respect the current frame and residue filters.
 
 ## 12. Residue Compare Tab
 
@@ -536,7 +527,7 @@ The Statistics chart displays the mean and quantile range of paths currently sho
 
 ### 20.1 `DLL load failed while importing QtCore/QtWidgets`
 
-This usually indicates conflicting Qt DLLs. Exit the Anaconda base environment, create a clean Python 3.10/3.11 virtual environment, and install `requirements.txt` there. Do not mix conda Qt packages with pip-installed PySide6.
+This usually indicates conflicting Qt DLLs. Use the project environment created by `uv sync` from the repository root. Do not mix conda Qt packages with the project's PySide6 installation.
 
 ### 20.2 Black 3D View or OpenGL Errors
 
@@ -547,9 +538,7 @@ This usually indicates conflicting Qt DLLs. Exit the Anaconda base environment, 
 
 ### 20.3 `pyqtgraph not installed`
 
-```powershell
-python -m pip install pyqtgraph
-```
+From the repository root, run `uv sync` to restore the declared dependencies.
 
 Restart the application afterward.
 

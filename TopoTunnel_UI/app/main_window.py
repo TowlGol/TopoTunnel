@@ -1468,10 +1468,8 @@ class MainWindow(QMainWindow):
         self._last_entry_exit_signature = None
         self._last_observer_overlay_signature = None
         self._top_controls_widget: Optional[QWidget] = None
-        self._top_controls_layout: Optional[QGridLayout] = None
+        self._top_controls_layout: Optional[QVBoxLayout] = None
         self._top_controls_items: list[QWidget] = []
-        self._color_label: Optional[QLabel] = None
-        self._bg_label: Optional[QLabel] = None
         self._loading_depth = 0
         self._chart_operation_history: list[list[int]] = []
         self._statistics_last_rows: list[dict] = []
@@ -1547,22 +1545,38 @@ class MainWindow(QMainWindow):
         # ── 1  Display ───────────────────────────────────
         lbl = QLabel("Color")
         lbl.setStyleSheet(_lbl); lbl.setToolTip("Background path color (light gray ↔ black)")
-        tb.addWidget(lbl)
+        self._path_color_label = lbl
         self._path_color_slider = QSlider(Qt.Horizontal)
         self._path_color_slider.setRange(0, 100); self._path_color_slider.setValue(35)
         self._path_color_slider.setFixedWidth(55)
         self._path_color_slider.setToolTip("Background path color: left=light gray, right=black")
         self._path_color_slider.valueChanged.connect(self._on_path_color_changed)
-        tb.addWidget(self._path_color_slider)
+        self._path_color_control = QWidget()
+        self._path_color_control.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self._path_color_control.setFixedWidth(96)
+        path_color_layout = QHBoxLayout(self._path_color_control)
+        path_color_layout.setContentsMargins(0, 0, 0, 0)
+        path_color_layout.setSpacing(3)
+        path_color_layout.addWidget(lbl)
+        path_color_layout.addWidget(self._path_color_slider)
+        tb.addWidget(self._path_color_control)
 
         lbl = QLabel("BG")
         lbl.setStyleSheet(_lbl); lbl.setToolTip("Background opacity")
-        tb.addWidget(lbl)
+        self._bg_opacity_label = lbl
         self._bg_opacity_slider = QSlider(Qt.Horizontal)
         self._bg_opacity_slider.setRange(1, 50); self._bg_opacity_slider.setValue(15)
         self._bg_opacity_slider.setFixedWidth(55); self._bg_opacity_slider.setToolTip("Background opacity")
         self._bg_opacity_slider.valueChanged.connect(self._on_bg_opacity_changed)
-        tb.addWidget(self._bg_opacity_slider)
+        self._bg_opacity_control = QWidget()
+        self._bg_opacity_control.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        self._bg_opacity_control.setFixedWidth(86)
+        bg_opacity_layout = QHBoxLayout(self._bg_opacity_control)
+        bg_opacity_layout.setContentsMargins(0, 0, 0, 0)
+        bg_opacity_layout.setSpacing(3)
+        bg_opacity_layout.addWidget(lbl)
+        bg_opacity_layout.addWidget(self._bg_opacity_slider)
+        tb.addWidget(self._bg_opacity_control)
 
         self._path_change_btn = QPushButton("Path Δ")
         self._path_change_btn.setCheckable(True)
@@ -1615,7 +1629,25 @@ class MainWindow(QMainWindow):
         self._entry_exit_btn.setCheckable(True); self._entry_exit_btn.setStyleSheet(_sm)
         self._entry_exit_btn.setToolTip("Show/hide entrance (green) and exit (red) points")
         self._entry_exit_btn.toggled.connect(self._toggle_entry_exit_points)
-        tb.addWidget(self._entry_exit_btn)
+        self._entry_exit_size_label = QLabel("Size")
+        self._entry_exit_size_label.setStyleSheet(_lbl)
+        self._entry_exit_size_label.setVisible(False)
+        self._entry_exit_size_slider = QSlider(Qt.Horizontal)
+        self._entry_exit_size_slider.setRange(3, 18)
+        self._entry_exit_size_slider.setValue(7)
+        self._entry_exit_size_slider.setFixedWidth(72)
+        self._entry_exit_size_slider.setToolTip("Entry/exit sphere size")
+        self._entry_exit_size_slider.setVisible(False)
+        self._entry_exit_size_slider.valueChanged.connect(self._on_entry_exit_size_changed)
+        self._entry_exit_control = QWidget()
+        self._entry_exit_control.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+        entry_exit_layout = QHBoxLayout(self._entry_exit_control)
+        entry_exit_layout.setContentsMargins(0, 0, 0, 0)
+        entry_exit_layout.setSpacing(3)
+        entry_exit_layout.addWidget(self._entry_exit_btn)
+        entry_exit_layout.addWidget(self._entry_exit_size_label)
+        entry_exit_layout.addWidget(self._entry_exit_size_slider)
+        tb.addWidget(self._entry_exit_control)
 
         self._entry_exit_scope_btn = QPushButton("EE: All")
         self._entry_exit_scope_btn.setCheckable(True); self._entry_exit_scope_btn.setStyleSheet(_sm)
@@ -2988,33 +3020,33 @@ class MainWindow(QMainWindow):
         )
         self._top_controls_widget = top_controls
 
-        controls_layout = QGridLayout(top_controls)
+        controls_layout = QVBoxLayout(top_controls)
         controls_layout.setContentsMargins(10, 8, 10, 8)
-        controls_layout.setHorizontalSpacing(8)
-        controls_layout.setVerticalSpacing(6)
+        controls_layout.setSpacing(6)
         self._top_controls_layout = controls_layout
 
-        self._color_label = QLabel("Color")
-        self._color_label.setStyleSheet("font-size:11px;color:#909399;")
-        self._bg_label = QLabel("BG")
-        self._bg_label.setStyleSheet("font-size:11px;color:#909399;")
         self._top_controls_items = [
-            self._color_label,
-            self._path_color_slider,
-            self._bg_label,
-            self._bg_opacity_slider,
+            self._path_color_control,
+            self._bg_opacity_control,
             self._point_select_btn,
             self._clear_sel_btn,
-            self._entry_exit_btn,
+            self._entry_exit_control,
             self._entry_exit_scope_btn,
             self._focus_btn,
             self._protein_toggle_btn,
             self._load_observer_protein_btn,
         ]
 
+        # These controls were initially created for the hidden toolbar. Make
+        # their new parent explicit so the labels and sliders remain visible
+        # after relocation into the main-view control strip.
+        for widget in self._top_controls_items:
+            widget.setParent(top_controls)
+
         self._central_layout.insertWidget(0, top_controls)
         top_controls.setVisible(True)
         self._refresh_top_controls_layout()
+        QTimer.singleShot(0, self._refresh_top_controls_layout)
 
         self._load_protein_btn.setText("Load Protein")
         self._load_observer_protein_btn.setText("Residue Observer")
@@ -3077,9 +3109,9 @@ class MainWindow(QMainWindow):
             button.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
 
         for widget in (
-            self._path_color_slider,
-            self._bg_opacity_slider,
-            self._entry_exit_btn,
+            self._path_color_control,
+            self._bg_opacity_control,
+            self._entry_exit_control,
             self._entry_exit_scope_btn,
             self._focus_btn,
             self._protein_toggle_btn,
@@ -3118,19 +3150,43 @@ class MainWindow(QMainWindow):
         layout = self._top_controls_layout
         while layout.count():
             item = layout.takeAt(0)
-            widget = item.widget()
-            if widget is not None:
-                widget.setParent(self._top_controls_widget)
+            child_layout = item.layout()
+            if child_layout is not None:
+                while child_layout.count():
+                    child_item = child_layout.takeAt(0)
+                    widget = child_item.widget()
+                    if widget is not None:
+                        widget.setParent(self._top_controls_widget)
+                child_layout.setParent(None)
+                child_layout.deleteLater()
+            else:
+                widget = item.widget()
+                if widget is not None:
+                    widget.setParent(self._top_controls_widget)
 
-        available_width = max(600, self._top_controls_widget.width())
-        columns = len(self._top_controls_items) if available_width >= 1220 else 7
-        for index, widget in enumerate(self._top_controls_items):
-            row = index // columns
-            column = index % columns
-            layout.addWidget(widget, row, column)
-        for column in range(columns):
-            layout.setColumnStretch(column, 0)
-        layout.setColumnStretch(columns, 1)
+        margins = layout.contentsMargins()
+        available_width = self._top_controls_widget.width() - margins.left() - margins.right()
+        if available_width <= 1:
+            QTimer.singleShot(50, self._refresh_top_controls_layout)
+            return
+        row = None
+        row_width = 0
+        spacing = 8
+        for widget in self._top_controls_items:
+            hint = widget.sizeHint()
+            item_width = max(widget.minimumSizeHint().width(), hint.width(), widget.minimumWidth())
+            required_width = item_width if row is None else row_width + spacing + item_width
+            if row is None or (row.count() and required_width > available_width):
+                row = QHBoxLayout()
+                row.setContentsMargins(0, 0, 0, 0)
+                row.setSpacing(spacing)
+                layout.addLayout(row)
+                row_width = 0
+            row.addWidget(widget)
+            widget.setVisible(True)
+            row_width += item_width + (spacing if row.count() > 1 else 0)
+        if row is not None:
+            row.addStretch(1)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -4118,11 +4174,14 @@ class MainWindow(QMainWindow):
             if self._chart_workspace is not None:
                 self._chart_workspace.set_path_color_map(path_color_map)
 
-    def _on_dataset_color_changed(self, key: str, color: str):
-        self.state.set_dataset_color(key, color)
+    def _on_dataset_color_changed(self, key: str, color: str, targets):
+        self.state.set_dataset_color(key, color, targets)
         dataset = self.db.get_dataset(key) if hasattr(self.db, "get_dataset") else None
         label = dataset["prefix"] if dataset else key
-        self._statusbar.showMessage(f"Dataset {label} tunnel color: {color}", 3000)
+        target_labels = ", ".join(str(target).replace("_", " ") for target in targets)
+        self._statusbar.showMessage(
+            f"Dataset {label} color applied to {target_labels}: {color}", 3000
+        )
 
     def _on_dataset_selection_changed(self, dataset_keys):
         self._residue_panel.set_dataset_filter(dataset_keys)
@@ -6258,6 +6317,9 @@ class MainWindow(QMainWindow):
             tuple(sorted(int(path_id) for path_id in self.state.effective_path_ids)),
             None if display_ids is None else tuple(sorted(int(path_id) for path_id in display_ids)),
             tuple(sorted((int(path_id), str(color)) for path_id, color in self._visible_dataset_path_color_map().items())),
+            tuple(sorted((str(key), str(color)) for key, color in self.state.dataset_start_colors.items())),
+            tuple(sorted((str(key), str(color)) for key, color in self.state.dataset_end_colors.items())),
+            tuple(sorted(int(path_id) for path_id in self._display_excluded_path_ids())),
         )
 
     def _render_effective_paths_if_needed(self, path_ids=None, color_map=None) -> None:
@@ -6364,7 +6426,16 @@ class MainWindow(QMainWindow):
             self._refresh_entry_exit_points()
 
     def _toggle_entry_exit_points(self, checked: bool):
+        self._entry_exit_size_label.setVisible(bool(checked))
+        self._entry_exit_size_slider.setVisible(bool(checked))
+        self._refresh_top_controls_layout()
         self.state.set_show_entry_exit_points(checked)
+
+    def _on_entry_exit_size_changed(self, value: int):
+        self._viewer.set_entry_exit_point_size(float(value))
+        if self.state.show_entry_exit_points:
+            self._last_entry_exit_signature = None
+            self._refresh_entry_exit_points()
 
     def _toggle_entry_exit_scope(self, checked: bool):
         self.state.set_entry_exit_current_only(checked)
@@ -6389,6 +6460,39 @@ class MainWindow(QMainWindow):
         visible = self.state.get_visible_category_path_ids()
         return set(visible)
 
+    def _entry_exit_color_maps(self) -> tuple[dict[int, str], dict[int, str]]:
+        entry_colors: dict[int, str] = {}
+        exit_colors: dict[int, str] = {}
+        # In Dataset Colors mode, the exit marker must use the same effective
+        # color as its path. The picker also stores an independent endpoint
+        # color, which remains available when this dataset uses cluster colors.
+        path_color_map = self._visible_dataset_path_color_map()
+        for dataset in self.db.list_datasets():
+            key = str(dataset.get("key", "") or "")
+            if not key:
+                continue
+            path_ids = self._dataset_path_ids(key)
+            if not path_ids:
+                continue
+            entry_color = self.state.dataset_start_colors.get(
+                key, self.state.dataset_colors.get(key, self.state.get_auto_color(0))
+            )
+            dataset_exit_color = self.state.dataset_end_colors.get(
+                key, self.state.dataset_colors.get(key, self.state.get_auto_color(0))
+            )
+            uses_dataset_color = self.state.dataset_cluster_display_key != key
+            for path_id in path_ids:
+                entry_colors[int(path_id)] = str(entry_color)
+                exit_color = (
+                    path_color_map.get(int(path_id), self.state.dataset_colors.get(
+                        key, self.state.get_auto_color(0)
+                    ))
+                    if uses_dataset_color
+                    else dataset_exit_color
+                )
+                exit_colors[int(path_id)] = str(exit_color)
+        return entry_colors, exit_colors
+
     def _refresh_entry_exit_scope_btn(self):
         current_only = self.state.entry_exit_current_only
         self._entry_exit_scope_btn.blockSignals(True)
@@ -6407,11 +6511,15 @@ class MainWindow(QMainWindow):
         if signature == self._last_entry_exit_signature:
             return
         self._last_entry_exit_signature = signature
+        entry_colors, exit_colors = self._entry_exit_color_maps()
         self._viewer.render_entry_exit_points(
             show=True,
             effective_ids=self.state.effective_path_ids,
             display_ids=display_ids,
             path_color_map=self._visible_dataset_path_color_map(),
+            entry_color_map=entry_colors,
+            exit_color_map=exit_colors,
+            excluded_ids=self._display_excluded_path_ids(),
         )
 
     def _on_entry_exit_display_changed(self, show: bool):
@@ -8148,6 +8256,8 @@ class MainWindow(QMainWindow):
     def _prune_removed_dataset_state(self, removed_path_ids: set[int]):
         if not removed_path_ids:
             return
+
+        self._path_panel.prune_removed_path_ids(removed_path_ids)
 
         self.state.residue_filtered_path_ids.difference_update(removed_path_ids)
         self.state.lasso_added_path_ids.difference_update(removed_path_ids)

@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem, QAbstractItemView, QMessageBox, QColorDialog,
     QFileDialog, QTabBar, QMenu, QSizePolicy, QApplication,
 )
-from PySide6.QtCore import Qt, Signal, QItemSelectionModel
+from PySide6.QtCore import Qt, Signal, QItemSelectionModel, QTimer
 
 from TopoTunnel_UI.app.models.path_model import PathTableModel, COL_KEYS, COL_WIDTHS
 
@@ -25,8 +25,8 @@ class PathPanel(QWidget):
         super().__init__(parent)
         self.state = state
         self.db = db
-        self._loaded_selected_path_ids = set()
         self._manual_selected_path_ids = set()
+        self._table_filter_signature = None
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(8, 8, 8, 8)
@@ -141,16 +141,20 @@ class PathPanel(QWidget):
         self._sub_tabs = QTabBar()
         self._sub_tabs.addTab("All Paths")
         self._sub_tabs.addTab("Selected (0)")
+        self._sub_tabs.setCurrentIndex(0)
+        self._sub_tabs.setTabToolTip(0, "Show all paths matching the current frame and residue filters")
+        self._sub_tabs.setTabToolTip(1, "Show the current selection immediately")
         self._sub_tabs.setExpanding(False)
         self._sub_tabs.setStyleSheet("QTabBar::tab { min-width: 100px; }")
         self._sub_tabs.currentChanged.connect(self._on_sub_tab_changed)
         tab_row.addWidget(self._sub_tabs)
 
-        self._load_sel_btn = QPushButton("Load Selected")
-        self._load_sel_btn.setEnabled(False)
-        self._load_sel_btn.setVisible(False)
-        self._load_sel_btn.clicked.connect(self._on_load_selected)
-        tab_row.addWidget(self._load_sel_btn)
+        self._load_profiles_btn = QPushButton("Load Profiles")
+        self._load_profiles_btn.setToolTip("Send the current selected paths to the profile chart")
+        self._load_profiles_btn.setEnabled(False)
+        self._load_profiles_btn.setVisible(False)
+        self._load_profiles_btn.clicked.connect(self._on_load_profiles)
+        tab_row.addWidget(self._load_profiles_btn)
         tab_row.addStretch()
 
         left_layout.addLayout(tab_row)
@@ -199,12 +203,13 @@ class PathPanel(QWidget):
 
     def set_db(self, db):
         self.db = db
-        self._manual_selected_path_ids.clear()
 
     def init_model(self):
         """Initialize the table model after db is available."""
-        self._manual_selected_path_ids.clear()
+        preserved_tab = self._sub_tabs.currentIndex()
+        preserved_selection_ids = set(self._manual_selected_path_ids or self.state.effective_path_ids)
         self._model = PathTableModel(self.db)
+        self._table_filter_signature = None
         self._table.setModel(self._model)
 
         # Set column widths
@@ -221,15 +226,57 @@ class PathPanel(QWidget):
         self._model.total_count_changed.connect(
             lambda count: self._path_count_label.setText(f"Paths: {count:,}")
         )
+        self._model.set_selected_paths(set(self.state.effective_path_ids))
+        self._on_sub_tab_changed(preserved_tab)
+        if preserved_tab == 0 and preserved_selection_ids:
+            QTimer.singleShot(
+                0,
+                lambda ids=preserved_selection_ids: self._sync_table_selection_from_path_ids(ids),
+            )
+        self._update_selected_view_state()
+
+    def prune_removed_path_ids(self, path_ids):
+        removed = {int(path_id) for path_id in (path_ids or ())}
+        if not removed:
+            return
+        self._manual_selected_path_ids.difference_update(removed)
 
     def refresh(self):
-        """Refresh the table based on current filters."""
-        if self._model:
+        """Reload data while respecting the active All Paths / Selected view."""
+        self._apply_table_filters(force=True)
+        self._update_selected_view_state(refresh_table=False)
+
+    def _apply_table_filters(self, *, force=False):
+        if self._model is None:
+            return
+        selected_ids = self._get_selected_view_path_ids() if self._sub_tabs.currentIndex() == 1 else None
+        residues = set(self.state.selected_residues) or None
+        signature = (
+            self.state.frame_min,
+            self.state.frame_max,
+            frozenset(residues or ()),
+            None if selected_ids is None else frozenset(selected_ids),
+        )
+        if not force and signature == self._table_filter_signature:
+            return
+
+        # A model reset clears Qt's row selection; it must not clear the user's
+        # path selection or emit a new 3D preview merely because tabs changed.
+        selection_model = self._table.selectionModel()
+        was_blocked = selection_model.blockSignals(True)
+        try:
             self._model.set_filters(
                 frame_min=self.state.frame_min,
                 frame_max=self.state.frame_max,
-                residue_filter=self.state.selected_residues if self.state.selected_residues else None,
+                residue_filter=residues,
+                path_id_filter=selected_ids,
             )
+        finally:
+            selection_model.blockSignals(was_blocked)
+        self._table_filter_signature = signature
+        self._sync_table_selection_from_path_ids(
+            self._manual_selected_path_ids or self.state.effective_path_ids
+        )
 
     def set_highlighted_paths(self, path_ids):
         if self._model:
@@ -493,6 +540,7 @@ class PathPanel(QWidget):
         else:
             self._manual_selected_path_ids.clear()
             self.paths_selected.emit([])
+        self._update_selected_view_state(refresh_table=False)
 
     def _on_table_clicked(self, index):
         if not index.isValid() or not self._model:
@@ -525,69 +573,53 @@ class PathPanel(QWidget):
 
     # ─── Sub-tab switching ───────────────────────────────
     def _on_sub_tab_changed(self, index):
-        """Switch between All Paths (0) and Selected (1) views."""
-        is_selected_tab = index == 1
-        self._load_sel_btn.setVisible(is_selected_tab)
-        n = len(self._get_selected_view_path_ids())
-        self._load_sel_btn.setEnabled(is_selected_tab and n > 0)
+        """Switch table scope immediately without changing the path selection."""
+        self._load_profiles_btn.setVisible(index == 1)
+        self.refresh()
 
-        if index == 0:
-            # Switch back to all paths (with current frame/residue filters)
-            self.refresh()
-        else:
-            if self._model:
-                if self._loaded_selected_path_ids:
-                    self._model.set_filters(
-                        frame_min=self.state.frame_min,
-                        frame_max=self.state.frame_max,
-                        residue_filter=self.state.selected_residues if self.state.selected_residues else None,
-                        path_id_filter=set(self._loaded_selected_path_ids),
-                    )
-                else:
-                    # Show empty table until "Load Selected" is clicked
-                    self._model.set_filters(path_id_filter=set())
-
-    def _on_load_selected(self):
-        """Load Selected button clicked — filter table + emit profile_requested."""
+    def _on_load_profiles(self):
+        """Load charts on request; the Selected table is already up to date."""
         selected = self._get_selected_view_path_ids()
         if not selected or not self._model:
             return
-        self._loaded_selected_path_ids = set(selected)
-
-        self._model.set_filters(
-            frame_min=self.state.frame_min,
-            frame_max=self.state.frame_max,
-            residue_filter=self.state.selected_residues if self.state.selected_residues else None,
-            path_id_filter=self._loaded_selected_path_ids,
-        )
-        self.profile_requested.emit(list(self._loaded_selected_path_ids))
+        self.profile_requested.emit(sorted(selected))
 
     def _get_selected_view_path_ids(self) -> set[int]:
-        """Selected tab source: effective paths first, otherwise visible category paths."""
+        """Use table selection, effective paths, or the existing category fallback."""
+        if self._manual_selected_path_ids:
+            return set(self._manual_selected_path_ids)
         if self.state.effective_path_ids:
             return set(self.state.effective_path_ids)
         return self.state.get_visible_category_path_ids()
 
-    def _update_selected_view_state(self):
+    def _update_selected_view_state(self, *, refresh_table=True):
         selected = self._get_selected_view_path_ids()
         n = len(selected)
         self._sub_tabs.setTabText(1, f"Selected ({n})")
-        self._load_sel_btn.setEnabled(n > 0 and self._sub_tabs.currentIndex() == 1)
+        self._load_profiles_btn.setEnabled(n > 0 and self._sub_tabs.currentIndex() == 1)
 
-        if self.state.effective_path_ids:
+        if self._manual_selected_path_ids:
+            self._status_label.setText(f"Table selection: {n} paths")
+        elif self.state.effective_path_ids:
             self._status_label.setText(f"Effective: {n} paths" if n else "")
         elif selected:
             self._status_label.setText(f"Visible categories: {n} paths")
         else:
             self._status_label.setText("")
+        if refresh_table and self._sub_tabs.currentIndex() == 1:
+            self._apply_table_filters()
 
     def _sync_table_selection_from_state(self):
         """Sync effective_path_ids to current cached table rows."""
+        self._sync_table_selection_from_path_ids(set(self.state.effective_path_ids))
+
+    def _sync_table_selection_from_path_ids(self, path_ids):
+        """Select requested path IDs among rows currently cached by the virtual table."""
         if not self._model or not self._table.selectionModel():
             return
 
         row_indices = self._model.get_loaded_row_indices_for_path_ids(
-            set(self.state.effective_path_ids)
+            set(path_ids or ())
         )
         sel_model = self._table.selectionModel()
         sel_model.blockSignals(True)

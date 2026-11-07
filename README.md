@@ -23,6 +23,9 @@ TopoTunnel/
 |-- README.md
 |-- .gitignore
 |-- .gitattributes
+|-- .python-version
+|-- pyproject.toml
+|-- uv.lock
 |-- TopoTunnel_Pipeline/
 |   |-- README.md
 |   |-- pipeline_gui.py
@@ -76,7 +79,7 @@ This video provides a complete walkthrough of TopoTunnel, including the source c
 
 ## Installation
 
-Clone the code repository and create an isolated Python environment. The commands below use Astral's `uv`; the two requirement files are installed into the same environment.
+Clone the code repository and let Astral's `uv` create the complete environment from the root `pyproject.toml` and `uv.lock`. This installs the dependencies for both the processing pipeline and the desktop UI in one environment.
 
 Install `uv` using the [official installation instructions](https://docs.astral.sh/uv/getting-started/installation/). For example:
 
@@ -90,35 +93,22 @@ irm https://astral.sh/uv/install.ps1 | iex
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-Then clone the repository and create the environment:
+Then clone the repository and synchronize the environment from the repository root:
 
 ```text
 git clone https://github.com/TowlGol/TopoTunnel.git
 cd TopoTunnel
-uv python install 3.11
-uv venv --python 3.11 .venv
+uv sync
 ```
 
-Activate the environment using the command for your shell:
+`uv sync` creates `.venv`, selects Python 3.11 from `.python-version`, and installs all dependencies listed in `pyproject.toml`. No separate `pip install` commands are required. Run either application through `uv` without activating the environment:
 
 ```powershell
-# Windows PowerShell
-.\.venv\Scripts\Activate.ps1
+uv run python -m TopoTunnel_UI
+uv run python TopoTunnel_Pipeline/pipeline_gui.py
 ```
 
-```bash
-# macOS/Linux
-source .venv/bin/activate
-```
-
-Then install both dependency sets:
-
-```bash
-uv pip install -r TopoTunnel_Pipeline/requirements.txt
-uv pip install -r TopoTunnel_UI/requirements.txt
-```
-
-The Pipeline GUI requires a Python interpreter with Tk support. If the selected Python does not include Tk, create the environment with a Tk-enabled Python 3.11 interpreter (for example, `uv venv --python /path/to/python3.11 .venv`). The pipeline and desktop UI can also be installed in separate environments when Qt/VTK dependencies need to be isolated from data-processing dependencies.
+If you prefer an activated environment, use `\.venv\Scripts\Activate.ps1` on Windows PowerShell or `source .venv/bin/activate` on macOS/Linux after `uv sync`, then run the Python commands without `uv run`. The Pipeline GUI requires an interpreter with Tk support; configure `uv` to use a Tk-enabled Python 3.11 interpreter before synchronizing if needed.
 
 ## Processing Your Own Dataset
 
@@ -131,8 +121,7 @@ The minimum inputs are:
 Start the processing interface:
 
 ```powershell
-cd TopoTunnel_Pipeline
-python pipeline_gui.py
+uv run python TopoTunnel_Pipeline/pipeline_gui.py
 ```
 
 Choose **Reference-Conformation Mapping and Dataset Preparation**, provide the aligned-frame directory and tunnel-profile CSV, select an output directory, and run the analysis. If CAVER output is not available, also select **Segmented CAVER Tunnel Computation and Tunnel-Profile Aggregation** and provide the CAVER installation and configuration paths.
@@ -173,7 +162,7 @@ Only the database is required for basic tunnel display. Keeping all six files to
 Run the application from the repository root:
 
 ```powershell
-python -m TopoTunnel_UI
+uv run python -m TopoTunnel_UI
 ```
 
 Then:

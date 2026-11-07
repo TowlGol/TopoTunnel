@@ -57,6 +57,8 @@ class AppState(QObject):
         # Excluded paths
         self.global_excluded_paths: Set[int] = set()
         self.dataset_colors: Dict[str, str] = {}
+        self.dataset_start_colors: Dict[str, str] = {}
+        self.dataset_end_colors: Dict[str, str] = {}
         self.visible_datasets: Set[str] = set()
         self.dataset_cluster_display_key: Optional[str] = None
         self.dataset_cluster_label_key: Optional[str] = None
@@ -337,16 +339,30 @@ class AppState(QObject):
                 continue
             # Brand-new dataset: assign default color and make visible
             self.dataset_colors[key] = self.get_auto_color(idx)
+            self.dataset_start_colors.setdefault(key, self.dataset_colors[key])
+            self.dataset_end_colors.setdefault(key, self.dataset_colors[key])
             self.visible_datasets.add(key)
             changed = True
+
+        for idx, key in enumerate(keys):
+            default_color = self.dataset_colors.get(key, self.get_auto_color(idx))
+            self.dataset_start_colors.setdefault(key, default_color)
+            self.dataset_end_colors.setdefault(key, default_color)
 
         # Remove stale keys that no longer exist in the database
         stale_keys = set(self.dataset_colors.keys()) - set(keys)
         if stale_keys:
             for key in stale_keys:
                 self.dataset_colors.pop(key, None)
+                self.dataset_start_colors.pop(key, None)
+                self.dataset_end_colors.pop(key, None)
                 self.visible_datasets.discard(key)
             changed = True
+
+        for color_map in (self.dataset_start_colors, self.dataset_end_colors):
+            for key in set(color_map) - set(keys):
+                color_map.pop(key, None)
+                changed = True
 
         stale_visible = {key for key in self.visible_datasets if key not in keys}
         if stale_visible:
@@ -363,14 +379,23 @@ class AppState(QObject):
         if changed:
             self.dataset_display_changed.emit()
 
-    def set_dataset_color(self, key: str, color: str):
+    def set_dataset_color(self, key: str, color: str, targets=None):
         color = str(color or "").strip()
         if not key or not color:
             return
-        if self.dataset_colors.get(key) == color:
-            return
-        self.dataset_colors[key] = color
-        self.dataset_display_changed.emit()
+        target_set = {str(target).strip().lower() for target in (targets or ("path",))}
+        changed = False
+        if "path" in target_set and self.dataset_colors.get(key) != color:
+            self.dataset_colors[key] = color
+            changed = True
+        if "start_point" in target_set and self.dataset_start_colors.get(key) != color:
+            self.dataset_start_colors[key] = color
+            changed = True
+        if "endpoint" in target_set and self.dataset_end_colors.get(key) != color:
+            self.dataset_end_colors[key] = color
+            changed = True
+        if changed:
+            self.dataset_display_changed.emit()
 
     def set_dataset_visible(self, key: str, visible: bool):
         if not key:
@@ -436,6 +461,8 @@ class AppState(QObject):
             "excludedCategories": list(self.excluded_categories),
             "globalExcludedPaths": list(self.global_excluded_paths),
             "datasetColors": self.dataset_colors,
+            "datasetStartColors": self.dataset_start_colors,
+            "datasetEndColors": self.dataset_end_colors,
             "visibleDatasets": list(self.visible_datasets),
             "datasetClusterDisplayKey": self.dataset_cluster_display_key,
             "datasetClusterLabelKey": self.dataset_cluster_label_key,
@@ -457,6 +484,8 @@ class AppState(QObject):
         self.excluded_categories = set(d.get("excludedCategories", []))
         self.global_excluded_paths = set(d.get("globalExcludedPaths", []))
         self.dataset_colors = d.get("datasetColors", {})
+        self.dataset_start_colors = d.get("datasetStartColors", {})
+        self.dataset_end_colors = d.get("datasetEndColors", {})
         self.visible_datasets = set(d.get("visibleDatasets", []))
         self.dataset_cluster_display_key = d.get("datasetClusterDisplayKey")
         self.dataset_cluster_label_key = d.get("datasetClusterLabelKey")

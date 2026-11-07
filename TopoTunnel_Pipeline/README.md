@@ -49,7 +49,7 @@ SQLite conversion            |
 | `atomic_properties.py` | Van der Waals radii used by the surface-gap calculation. |
 | `residue_properties.py` | Residue hydrophobicity values written to path profiles. |
 | `path_simplification.py` | Optional RDP path-simplification helpers. |
-| `requirements.txt` | Python dependencies. |
+| `requirements.txt` | Legacy Pipeline-only dependency list; the repository-root `pyproject.toml` is the source for the unified `uv` environment. |
 | `run_gui.bat` | Windows launcher for `pipeline_gui.py`. |
 | `.gitignore` | Excludes caches, generated output, and temporary processing directories. |
 
@@ -73,26 +73,19 @@ irm https://astral.sh/uv/install.ps1 | iex
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-From the repository root, create an isolated environment and install the Pipeline dependencies:
+From the repository root, run `uv sync` to create `.venv` and install all Pipeline and UI dependencies specified by the root `pyproject.toml` and `uv.lock`:
 
 ```text
-uv python install 3.11
-uv venv --python 3.11 .venv
+uv sync
 ```
 
-Activate it with `.\.venv\Scripts\Activate.ps1` in Windows PowerShell or `source .venv/bin/activate` on macOS/Linux, then run:
+Start the Pipeline GUI from the repository root:
 
 ```bash
-uv pip install -r TopoTunnel_Pipeline/requirements.txt
+uv run python TopoTunnel_Pipeline/pipeline_gui.py
 ```
 
-The Pipeline GUI uses Tkinter. Confirm that the Python interpreter has Tk support; if the selected interpreter does not, create the environment with a Tk-enabled Python 3.11 interpreter, for example `uv venv --python /path/to/python3.11 .venv`.
-
-Start the GUI from the repository root:
-
-```bash
-python TopoTunnel_Pipeline/pipeline_gui.py
-```
+The Pipeline GUI uses Tkinter. Confirm that the Python interpreter selected by `uv` has Tk support before running the GUI.
 
 On Windows, `run_gui.bat` is also available as a convenience launcher.
 

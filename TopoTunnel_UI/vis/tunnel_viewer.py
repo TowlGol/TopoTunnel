@@ -309,6 +309,7 @@ class TunnelViewer3D(QWidget):
         self._entry_points: Dict[int, np.ndarray] = {}  # path_id -> start xyz
         self._exit_points: Dict[int, np.ndarray] = {}   # path_id -> end xyz
         self._entry_exit_visible = False
+        self._entry_exit_point_size = 7.0
         self._rendered_entry_exit_counts = {"entries": 0, "exits": 0}
         self._entry_exit_display_ids: Optional[Set[int]] = None
         self._entry_exit_effective_ids: Set[int] = set()
@@ -1357,6 +1358,9 @@ class TunnelViewer3D(QWidget):
         effective_ids: Optional[Set[int]] = None,
         display_ids: Optional[Set[int]] = None,
         path_color_map: Optional[Dict[int, str]] = None,
+        entry_color_map: Optional[Dict[int, str]] = None,
+        exit_color_map: Optional[Dict[int, str]] = None,
+        excluded_ids: Optional[Set[int]] = None,
     ):
         """Render start/end points, optionally colored by current path rendering.
 
@@ -1367,7 +1371,11 @@ class TunnelViewer3D(QWidget):
             tuple(sorted(int(path_id) for path_id in (effective_ids or set()))),
             None if display_ids is None else tuple(sorted(int(path_id) for path_id in display_ids)),
             tuple(sorted((int(path_id), str(color)) for path_id, color in (path_color_map or {}).items())),
+            tuple(sorted((int(path_id), str(color)) for path_id, color in (entry_color_map or {}).items())),
+            tuple(sorted((int(path_id), str(color)) for path_id, color in (exit_color_map or {}).items())),
+            tuple(sorted(int(path_id) for path_id in (excluded_ids or set()))),
             self._bg_exclusion_signature,
+            float(self._entry_exit_point_size),
         )
         if signature == self._entry_exit_render_signature:
             return
@@ -1385,6 +1393,7 @@ class TunnelViewer3D(QWidget):
 
         eff = effective_ids or set()
         visible_ids = None if display_ids is None else set(display_ids)
+        excluded = self._excluded_path_ids | {int(path_id) for path_id in (excluded_ids or set())}
         self._entry_exit_effective_ids = {int(pid) for pid in eff}
         self._entry_exit_display_ids = None if visible_ids is None else {int(pid) for pid in visible_ids}
 
@@ -1413,25 +1422,30 @@ class TunnelViewer3D(QWidget):
                 actor_index += 1
             return total_points
 
-        def _collect_points(source_points, default_color: str):
+        def _collect_points(source_points, default_color: str, color_map=None):
             bg: Dict[str, list] = {}
             eff_map: Dict[str, list] = {}
             for pid, pt in source_points.items():
-                if pid in self._excluded_path_ids:
+                if pid in excluded:
                     continue
                 if visible_ids is not None and pid not in visible_ids:
                     continue
-                color = (path_color_map or {}).get(pid, default_color)
+                color = (color_map or {}).get(pid, (path_color_map or {}).get(pid, default_color))
                 target = eff_map if pid in eff else bg
                 target.setdefault(color, []).append((pid, pt))
             return bg, eff_map
 
-        start_bg, start_eff = _collect_points(self._entry_points, "#2ECC71")
-        end_bg, end_eff = _collect_points(self._exit_points, "#E74C3C")
-        start_bg_count = _render_grouped_points(start_bg, point_size=7.0, opacity=1.0, suffix="entry_bg")
-        start_eff_count = _render_grouped_points(start_eff, point_size=12.0, opacity=1.0, suffix="entry_eff")
-        end_bg_count = _render_grouped_points(end_bg, point_size=7.0, opacity=1.0, suffix="exit_bg")
-        end_eff_count = _render_grouped_points(end_eff, point_size=12.0, opacity=1.0, suffix="exit_eff")
+        start_bg, start_eff = _collect_points(self._entry_points, "#2ECC71", entry_color_map)
+        end_bg, end_eff = _collect_points(self._exit_points, "#E74C3C", exit_color_map)
+        point_size = max(1.0, float(self._entry_exit_point_size))
+        start_bg_count = _render_grouped_points(start_bg, point_size=point_size, opacity=1.0, suffix="entry_bg")
+        start_eff_count = _render_grouped_points(
+            start_eff, point_size=point_size * (12.0 / 7.0), opacity=1.0, suffix="entry_eff"
+        )
+        end_bg_count = _render_grouped_points(end_bg, point_size=point_size, opacity=1.0, suffix="exit_bg")
+        end_eff_count = _render_grouped_points(
+            end_eff, point_size=point_size * (12.0 / 7.0), opacity=1.0, suffix="exit_eff"
+        )
 
         self._rendered_entry_exit_counts = {
             "entries": start_bg_count + start_eff_count,
@@ -1447,6 +1461,14 @@ class TunnelViewer3D(QWidget):
             f"[VIEW] render entry/exit points={total}, "
             f"effective_highlighted={len(eff)}"
         )
+
+    def set_entry_exit_point_size(self, point_size: float):
+        """Set the base screen-space size for entry and exit point spheres."""
+        point_size = max(1.0, float(point_size))
+        if point_size == self._entry_exit_point_size:
+            return
+        self._entry_exit_point_size = point_size
+        self._entry_exit_render_signature = None
 
     def _remove_entry_exit(self, render: bool = True, *, clear_signature: bool = True):
         if not self._plotter:

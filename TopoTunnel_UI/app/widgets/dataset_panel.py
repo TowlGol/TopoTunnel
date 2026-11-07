@@ -6,14 +6,16 @@ import os
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QTreeWidget, QTreeWidgetItem,
     QLabel, QPushButton, QFileDialog, QMessageBox, QInputDialog, QColorDialog,
-    QListView, QAbstractItemView, QFrame, QSizePolicy,
+    QListView, QAbstractItemView, QFrame, QSizePolicy, QCheckBox, QGroupBox,
+    QDialog,
 )
 from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QColor
 
 
 class DatasetPanel(QWidget):
     datasets_changed = Signal(dict)
-    dataset_color_changed = Signal(str, str)
+    dataset_color_changed = Signal(str, str, object)
     dataset_visibility_changed = Signal(str, bool)
     dataset_visibility_batch_changed = Signal(object, bool)
     dataset_selection_changed = Signal(object)
@@ -154,6 +156,19 @@ class DatasetPanel(QWidget):
 
             if hasattr(self.db, "get_dataset_cluster_path_groups"):
                 cluster_groups = self.db.get_dataset_cluster_path_groups(dataset["key"])
+                select_all = QTreeWidgetItem(["Select all clusters"])
+                select_all.setFlags(
+                    select_all.flags() | Qt.ItemIsUserCheckable | Qt.ItemIsSelectable
+                )
+                select_all.setCheckState(0, Qt.Unchecked)
+                select_all.setData(
+                    0,
+                    Qt.UserRole,
+                    {"type": "select_all_clusters", "key": dataset["key"]},
+                )
+                if not cluster_groups:
+                    select_all.setDisabled(True)
+                item.addChild(select_all)
                 for cluster_id, path_ids in sorted(cluster_groups.items(), key=lambda kv: (kv[0], len(kv[1]))):
                     child = QTreeWidgetItem(
                         [f"Cluster {cluster_id} ({len(path_ids)} paths)"]
@@ -169,6 +184,7 @@ class DatasetPanel(QWidget):
                         child.setCheckState(0, Qt.Checked)
                     item.addChild(child)
                     self._cluster_item_path_ids[(dataset["key"], int(cluster_id))] = set(path_ids)
+                self._sync_select_all_cluster_item(item)
             item.setExpanded(False)
         self._summary_label.setText(
             f"{len(datasets)} dataset(s) loaded | {total_paths:,} paths | {total_residues:,} residues"
@@ -411,9 +427,49 @@ class DatasetPanel(QWidget):
         if self._suppress_cluster_item_changed or column != 0:
             return
         payload = item.data(0, Qt.UserRole) or {}
-        if payload.get("type") != "cluster":
+        item_type = payload.get("type")
+        if item_type == "select_all_clusters":
+            checked = item.checkState(0) == Qt.Checked
+            dataset_item = item.parent()
+            self._suppress_cluster_item_changed = True
+            for idx in range(dataset_item.childCount()):
+                child = dataset_item.child(idx)
+                child_payload = child.data(0, Qt.UserRole) or {}
+                if child_payload.get("type") == "cluster":
+                    child.setCheckState(0, Qt.Checked if checked else Qt.Unchecked)
+            self._suppress_cluster_item_changed = False
+            self._emit_cluster_selection()
             return
+        if item_type != "cluster":
+            return
+        self._sync_select_all_cluster_item(item.parent())
         self._emit_cluster_selection()
+
+    def _sync_select_all_cluster_item(self, dataset_item: QTreeWidgetItem):
+        if dataset_item is None:
+            return
+        select_all_item = None
+        cluster_items = []
+        for idx in range(dataset_item.childCount()):
+            child = dataset_item.child(idx)
+            payload = child.data(0, Qt.UserRole) or {}
+            if payload.get("type") == "select_all_clusters":
+                select_all_item = child
+            elif payload.get("type") == "cluster":
+                cluster_items.append(child)
+        if select_all_item is None:
+            return
+        checked_count = sum(child.checkState(0) == Qt.Checked for child in cluster_items)
+        if checked_count == len(cluster_items) and cluster_items:
+            state = Qt.Checked
+        elif checked_count:
+            state = Qt.PartiallyChecked
+        else:
+            state = Qt.Unchecked
+        was_suppressed = self._suppress_cluster_item_changed
+        self._suppress_cluster_item_changed = True
+        select_all_item.setCheckState(0, state)
+        self._suppress_cluster_item_changed = was_suppressed
 
     def _on_add(self):
         folder_paths = self._select_dataset_folders()
@@ -447,7 +503,7 @@ class DatasetPanel(QWidget):
             self.datasets_changed.emit({
                 "action": "add",
                 "refresh_3d": True,
-                "reset_state": True,
+                "reset_state": False,
             })
 
     def _select_dataset_folders(self) -> list[str]:
@@ -588,14 +644,56 @@ class DatasetPanel(QWidget):
         key = self._current_key()
         if not key:
             return
-        current = self._dataset_color(key)
-        color = QColorDialog.getColor(parent=self)
+
+        color_dialog = QColorDialog(QColor(self._dataset_color(key)), self)
+        color_dialog.setWindowTitle("Select Color")
+        # Force the Qt picker UI so the color wheel, palette, and value fields
+        # are present consistently across platforms.
+        color_dialog.setOption(QColorDialog.ColorDialogOption.DontUseNativeDialog, True)
+        color_dialog.setOption(QColorDialog.ColorDialogOption.ShowAlphaChannel, False)
+        color_dialog.setMinimumSize(460, 360)
+
+        target_group = QGroupBox("Apply color to")
+        target_layout = QHBoxLayout(target_group)
+        target_checks = {
+            "start_point": QCheckBox("Start Point"),
+            "endpoint": QCheckBox("ENDpoint"),
+            "path": QCheckBox("PATH"),
+        }
+        for checkbox in target_checks.values():
+            checkbox.setChecked(True)
+            target_layout.addWidget(checkbox)
+        picker_layout = color_dialog.layout()
+        if isinstance(picker_layout, QGridLayout):
+            picker_layout.addWidget(
+                target_group,
+                picker_layout.rowCount(),
+                0,
+                1,
+                max(1, picker_layout.columnCount()),
+            )
+        elif picker_layout is not None:
+            picker_layout.addWidget(target_group)
+
+        if color_dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        targets = [target for target, checkbox in target_checks.items() if checkbox.isChecked()]
+        if not targets:
+            QMessageBox.information(self, "Select Color", "Select at least one object to color.")
+            return
+
+        color = color_dialog.currentColor()
         if not color.isValid():
             return
         hex_color = color.name().upper()
-        if hex_color == current:
+        current_colors = {
+            "path": self._dataset_color(key),
+            "start_point": self.state.dataset_start_colors.get(key, self._dataset_color(key)),
+            "endpoint": self.state.dataset_end_colors.get(key, self._dataset_color(key)),
+        }
+        if all(current_colors.get(target) == hex_color for target in targets):
             return
-        self.dataset_color_changed.emit(key, hex_color)
+        self.dataset_color_changed.emit(key, hex_color, targets)
         self.refresh()
 
     def _on_toggle_visibility(self):
