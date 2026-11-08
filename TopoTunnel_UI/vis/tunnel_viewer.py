@@ -253,6 +253,7 @@ class TunnelViewer3D(QWidget):
         # Protein model state
         self._protein_visible = True
         self._protein_style = "cartoon"
+        self._protein_labels_visible = False
         self._protein_opacity = 1.0
         self._protein_highlight_style = "ball_and_stick"
         self._protein_highlight_quality = "high"
@@ -2312,7 +2313,7 @@ class TunnelViewer3D(QWidget):
         if not self._plotter:
             return {"ok": False, "error": "plotter_unavailable"}
 
-        valid_styles = {"cartoon", "backbone", "tube", "ca_spheres"}
+        valid_styles = {"cartoon", "backbone", "tube", "ca_spheres", "ball_and_stick", "sticks"}
         style = style if style in valid_styles else "cartoon"
 
         reuse_raw_cache = (
@@ -2361,7 +2362,7 @@ class TunnelViewer3D(QWidget):
         if not self._plotter:
             return {"ok": False, "error": "plotter_unavailable"}
 
-        valid_styles = {"cartoon", "backbone", "tube", "ca_spheres"}
+        valid_styles = {"cartoon", "backbone", "tube", "ca_spheres", "ball_and_stick", "sticks"}
         style = style if style in valid_styles else "cartoon"
         source_key = str(source_key or "<in_memory_protein>")
 
@@ -2428,7 +2429,7 @@ class TunnelViewer3D(QWidget):
         if not self._plotter:
             return {"ok": False, "error": "plotter_unavailable"}
 
-        valid_styles = {"cartoon", "backbone", "tube", "ca_spheres"}
+        valid_styles = {"cartoon", "backbone", "tube", "ca_spheres", "ball_and_stick", "sticks"}
         style = style if style in valid_styles else "cartoon"
         source_key = str(source_key or "<prepared_protein>")
 
@@ -2446,6 +2447,31 @@ class TunnelViewer3D(QWidget):
             render=render,
         )
 
+    def set_protein_labels_visible(self, visible: bool):
+        self._protein_labels_visible = bool(visible)
+        self._refresh_protein_labels()
+
+    def _refresh_protein_labels(self, *, render=True):
+        if not self._plotter:
+            return
+        self._plotter.remove_actor("reference_residue_labels", render=False)
+        if self._protein_labels_visible and self._protein_visible and self._protein_model_cache and self._protein_opacity > 0.05:
+            groups = {}
+            for atom in self._protein_model_cache.get("atoms_aligned", []):
+                key = (str(atom.get("chain_id", "")), int(atom.get("res_seq", 0)), str(atom.get("res_name", "")))
+                groups.setdefault(key, []).append(np.asarray(atom["position"], dtype=np.float64))
+            if groups:
+                points = np.asarray([np.mean(coords, axis=0) for coords in groups.values()])
+                labels = [f"{name} {rid}" + (f" ({chain})" if chain else "") for chain, rid, name in groups]
+                self._plotter.add_point_labels(
+                    points, labels, name="reference_residue_labels",
+                    font_size=14, text_color="#111827", shape_color="#FFFFFF",
+                    shape_opacity=0.72, point_size=0, always_visible=True,
+                    reset_camera=False, render=False,
+                )
+        if render:
+            self._plotter.render()
+
     def set_protein_visible(self, visible: bool):
         self._protein_visible = bool(visible)
         if not self._plotter or self._protein_model_cache is None:
@@ -2458,7 +2484,7 @@ class TunnelViewer3D(QWidget):
         self._plotter.render()
 
     def set_protein_style(self, style: str):
-        valid_styles = {"cartoon", "backbone", "tube", "ca_spheres"}
+        valid_styles = {"cartoon", "backbone", "tube", "ca_spheres", "ball_and_stick", "sticks"}
         if style not in valid_styles:
             return
         self._protein_style = style
@@ -2496,6 +2522,7 @@ class TunnelViewer3D(QWidget):
                 self._tune_protein_actor_priority(actor, opacity=max(0.05, self._protein_opacity))
             except Exception:
                 pass
+        self._refresh_protein_labels(render=False)
         if render:
             self._plotter.render()
 
@@ -2776,6 +2803,32 @@ class TunnelViewer3D(QWidget):
         self._binding_site_cache = None
         self._remove_binding_sites(render=True)
 
+    def _render_reference_atoms(self, style, opacity, hidden):
+        cache = self._protein_model_cache
+        meshes = cache.setdefault("reference_atom_meshes", {})
+        if style not in meshes:
+            payload = self._build_protein_highlight_payload_from_atoms(
+                cache.get("atoms_aligned", []), style=style, whole_protein=True,
+            ) or {}
+            built = []
+            for spec in payload.get("atom_specs", []):
+                mesh = self._build_highlight_atom_mesh(spec["positions"], spec["radius"])
+                built.append((mesh, spec["color"]))
+            for spec in payload.get("bond_specs", []):
+                segments = spec["segments"]
+                mesh = pv.PolyData(np.asarray(segments).reshape(-1, 3))
+                mesh.lines = np.column_stack((np.full(len(segments), 2), np.arange(0, len(segments)*2, 2), np.arange(1, len(segments)*2, 2))).ravel()
+                built.append((mesh.tube(radius=spec["radius"], n_sides=self._HIGHLIGHT_BOND_SIDES, capping=True), spec["color"]))
+            meshes[style] = built
+        for index, (mesh, color) in enumerate(meshes[style]):
+            actor = self._plotter.add_mesh(
+                mesh, color=color, opacity=opacity, smooth_shading=True,
+                name=f"protein_reference_{index}", pickable=False, reset_camera=False, render=False,
+            )
+            actor.SetVisibility(0 if hidden else 1)
+            self._tune_protein_actor_priority(actor, opacity=opacity)
+            self._protein_actors.append(actor)
+
     def _render_protein_model(self, render: bool = True):
         if not self._plotter or self._protein_model_cache is None or not self._protein_visible:
             return
@@ -2785,6 +2838,9 @@ class TunnelViewer3D(QWidget):
         hide_protein = opacity <= 0.05
         actor_opacity = max(0.05, opacity)
         cache = self._protein_model_cache
+
+        if style in {"ball_and_stick", "sticks"}:
+            self._render_reference_atoms(style, actor_opacity, hide_protein)
 
         # Cartoon ribbon style (closest to classic protein ribbon view).
         if style == "cartoon":
@@ -2858,6 +2914,7 @@ class TunnelViewer3D(QWidget):
                 self._tune_protein_actor_priority(actor, opacity=actor_opacity)
                 self._protein_actors.append(actor)
 
+        self._refresh_protein_labels(render=False)
         if self._protein_highlight_render_enabled:
             self._render_protein_highlight(render=False)
         else:
@@ -3464,7 +3521,7 @@ class TunnelViewer3D(QWidget):
             if actor is not None:
                 used_keys.add(actor_key)
 
-    def _build_protein_highlight_payload_from_atoms(self, atoms: Sequence[dict]) -> dict | None:
+    def _build_protein_highlight_payload_from_atoms(self, atoms: Sequence[dict], *, style=None, whole_protein=False) -> dict | None:
         if not atoms:
             return None
         bond_pairs: list[tuple[int, int]] = []
@@ -3481,26 +3538,25 @@ class TunnelViewer3D(QWidget):
             [self._highlight_covalent_radius_for_element(element) for element in atom_elements],
             dtype=np.float64,
         )
-        highlight_style = str(self._protein_highlight_style or "ball_and_stick")
+        highlight_style = str(style or self._protein_highlight_style or "ball_and_stick")
         render_atoms = highlight_style in {"ball_and_stick", "spheres"}
         render_bonds = highlight_style in {"ball_and_stick", "sticks"}
         atom_radius_scale = float(self._HIGHLIGHT_STYLE_RADIUS_SCALE.get(highlight_style, 0.72))
         visible_atom_radii = atom_radii * atom_radius_scale if render_atoms else atom_radii
 
-        for idx, atom_a in enumerate(atoms):
-            pos_a = atom_positions[idx]
-            for jdx in range(idx + 1, len(atoms)):
-                atom_b = atoms[jdx]
-                if int(atom_a.get("res_seq", 0) or 0) != int(atom_b.get("res_seq", 0) or 0):
-                    continue
-                pos_b = atom_positions[jdx]
-                distance = float(np.linalg.norm(pos_a - pos_b))
-                max_distance = min(
-                    2.2,
-                    (bond_radii[idx] + bond_radii[jdx]) * self._HIGHLIGHT_BOND_MAX_SCALE,
-                )
-                if distance <= max_distance:
-                    bond_pairs.append((idx, jdx))
+        # Spatial neighbors avoid quadratic work for a whole reference protein.
+        from scipy.spatial import cKDTree
+        for idx, jdx in sorted(cKDTree(atom_positions).query_pairs(2.2)):
+            atom_a, atom_b = atoms[idx], atoms[jdx]
+            same_residue = (atom_a.get("chain_id", ""), atom_a.get("res_seq")) == (atom_b.get("chain_id", ""), atom_b.get("res_seq"))
+            if not same_residue and not whole_protein:
+                continue
+            if whole_protein and atom_a.get("chain_id", "") != atom_b.get("chain_id", ""):
+                continue
+            distance = float(np.linalg.norm(atom_positions[idx] - atom_positions[jdx]))
+            max_distance = min(2.2, (bond_radii[idx] + bond_radii[jdx]) * self._HIGHLIGHT_BOND_MAX_SCALE)
+            if 1e-4 < distance <= max_distance:
+                bond_pairs.append((idx, jdx))
 
         atom_specs: list[dict] = []
         bond_specs: list[dict] = []
@@ -3566,7 +3622,7 @@ class TunnelViewer3D(QWidget):
                     }
                 )
 
-        if len({int(atom.get("res_seq", 0) or 0) for atom in atoms}) >= 2:
+        if not whole_protein and len({int(atom.get("res_seq", 0) or 0) for atom in atoms}) >= 2:
             hbond_specs = self._build_protein_hbond_specs(
                 atoms,
                 atom_positions,
@@ -3626,6 +3682,8 @@ class TunnelViewer3D(QWidget):
             self._plotter.render()
 
     def _remove_protein(self, render: bool = True, keep_highlight_cache: bool = False):
+        if self._plotter:
+            self._plotter.remove_actor("reference_residue_labels", render=False)
         if self._plotter:
             for actor in self._protein_actors:
                 try:

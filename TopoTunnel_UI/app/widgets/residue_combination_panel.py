@@ -4,6 +4,7 @@ Panel for inspecting relationships among up to four specific residues.
 from __future__ import annotations
 
 import csv
+import json
 import copy
 from collections import OrderedDict
 import os
@@ -1041,11 +1042,21 @@ class ResidueCombinationPanel(QWidget):
         except OSError:
             return None
         frame_count = int(values.shape[1])
+        frame_ids = np.arange(1, frame_count + 1, dtype=np.int64)
+        frame_index_path = os.path.join(os.path.dirname(npy_path), "residue_distance_frames.json")
+        if os.path.isfile(frame_index_path):
+            try:
+                with open(frame_index_path, encoding="utf-8") as handle:
+                    frame_ids = np.asarray(json.load(handle), dtype=np.int64)
+                if frame_ids.ndim != 1 or len(frame_ids) != frame_count or np.any(np.diff(frame_ids) <= 0):
+                    return None
+            except (OSError, ValueError, TypeError):
+                return None
         return {
             "kind": "npy",
             "path": npy_path,
             "csv_path": combo_csv_path,
-            "frame_ids": np.arange(1, frame_count + 1, dtype=np.int64),
+            "frame_ids": frame_ids,
             "combo_rows": combo_rows,
             "values": values,
         }

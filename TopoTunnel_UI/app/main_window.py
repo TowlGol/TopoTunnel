@@ -51,10 +51,34 @@ from TopoTunnel_UI.core.residue_combination import (
     trimmed_length_range,
 )
 from TopoTunnel_UI.core.state import AppState
-from TopoTunnel_UI.core.exporter import export_paths_to_pdb
+from TopoTunnel_UI.core.dataset_export import export_ui_datasets
 from TopoTunnel_UI.vis.tunnel_viewer import TunnelViewer3D
 from TopoTunnel_UI.vis.pse_parser import parse_pse_file, pse_protein_to_pdb_string
 from TopoTunnel_UI.vis.charts import ProfileChart, StatisticsChart
+
+
+class DatasetExportWorker(QThread):
+    """Run dataset export while the modal progress dialog keeps the UI responsive."""
+
+    def __init__(self, db, path_ids, category, directory, split, assets, parent=None):
+        super().__init__(parent)
+        self.arguments = (db, list(path_ids), category, directory)
+        self.options = dict(split_frame_paths=split, assets=assets)
+        self.result = None
+        self.error = None
+
+    def run(self):
+        try:
+            self.result = export_ui_datasets(*self.arguments, **self.options)
+        except Exception as exc:
+            self.error = str(exc)
+
+
+class DatasetExportProgress(QDialog):
+    def reject(self):
+        # The export publishes its directory atomically on completion. Keep
+        # the source datasets open until the background thread has finished.
+        pass
 
 
 class DataLoader(QObject):
@@ -1693,16 +1717,24 @@ class MainWindow(QMainWindow):
         tb.addWidget(self._protein_toggle_btn)
 
         self._protein_style_combo = QComboBox()
-        self._protein_style_combo.addItems(["cartoon", "backbone", "tube", "ca_spheres"])
-        self._protein_style_combo.setCurrentText("cartoon")
+        for label, value in (("Cartoon", "cartoon"), ("Ball-and-Stick", "ball_and_stick"), ("Sticks", "sticks")):
+            self._protein_style_combo.addItem(label, value)
+        self._protein_style_combo.setCurrentIndex(0)
         self._protein_style_combo.setFixedHeight(24)
         self._protein_style_combo.setMaxVisibleItems(10)
-        self._configure_toolbar_combo(self._protein_style_combo, width=108, min_contents=10)
+        self._configure_toolbar_combo(self._protein_style_combo, width=130, min_contents=13)
         self._refresh_combo_popup_width(self._protein_style_combo)
         self._protein_style_combo.setEnabled(False)
         self._protein_style_combo.setToolTip("Protein style")
         self._protein_style_combo.currentTextChanged.connect(self._on_protein_style_changed)
         tb.addWidget(self._protein_style_combo)
+        self._protein_labels_btn = QPushButton("Label")
+        self._protein_labels_btn.setCheckable(True)
+        self._protein_labels_btn.setEnabled(False)
+        self._protein_labels_btn.setStyleSheet(_sm)
+        self._protein_labels_btn.setToolTip("Show residue names and numbers on the reference protein")
+        self._protein_labels_btn.toggled.connect(lambda checked: self._viewer.set_protein_labels_visible(checked))
+        tb.addWidget(self._protein_labels_btn)
 
         self._protein_align_combo = QComboBox()
         self._protein_align_combo.addItem("kabsch", "auto_kabsch")
@@ -3034,6 +3066,8 @@ class MainWindow(QMainWindow):
             self._entry_exit_scope_btn,
             self._focus_btn,
             self._protein_toggle_btn,
+            self._protein_style_combo,
+            self._protein_labels_btn,
             self._load_observer_protein_btn,
         ]
 
@@ -3115,6 +3149,8 @@ class MainWindow(QMainWindow):
             self._entry_exit_scope_btn,
             self._focus_btn,
             self._protein_toggle_btn,
+            self._protein_style_combo,
+            self._protein_labels_btn,
             self._load_observer_protein_btn,
             self._point_select_btn,
             self._clear_sel_btn,
@@ -3131,7 +3167,7 @@ class MainWindow(QMainWindow):
             self._load_protein_btn,
         ):
             widget.setVisible(False)
-        self._protein_style_combo.setVisible(False)
+        self._protein_style_combo.setVisible(True)
         self._frame_menu_btn.setVisible(False)
 
         self._residue_toggle_btn.blockSignals(True)
@@ -7718,6 +7754,7 @@ class MainWindow(QMainWindow):
     def _set_protein_controls_enabled(self, enabled: bool):
         self._protein_toggle_btn.setEnabled(enabled)
         self._protein_style_combo.setEnabled(enabled)
+        self._protein_labels_btn.setEnabled(enabled)
         self._protein_opacity_slider.setEnabled(enabled)
         self._clear_protein_btn.setEnabled(enabled)
 
@@ -7780,7 +7817,7 @@ class MainWindow(QMainWindow):
             self._load_protein_file(self._protein_path, keep_toggle_state=keep_toggle_state)
 
     def _load_protein_file(self, pdb_path: str, keep_toggle_state: bool = False) -> bool:
-        style = self._protein_style_combo.currentText().strip() or "cartoon"
+        style = self._protein_style_combo.currentData() or "cartoon"
         align_mode = self._protein_align_combo.currentData() or self._protein_align_combo.currentText()
         anchors = self._build_residue_anchor_map()
         result = self._viewer.load_protein_from_file(
@@ -7889,6 +7926,7 @@ class MainWindow(QMainWindow):
             self._statusbar.showMessage("Protein overlay hidden", 3000)
 
     def _on_protein_style_changed(self, style: str):
+        style = self._protein_style_combo.currentData() or "cartoon"
         self._viewer.set_protein_style(style)
         if self._protein_path:
             self._statusbar.showMessage(f"Protein style: {style}", 2000)
@@ -8033,8 +8071,42 @@ class MainWindow(QMainWindow):
         else:
             self._statusbar.showMessage("Binding site surfaces hidden", 3000)
 
+    def _dataset_export_assets(self, key):
+        binding = self.db._datasets_by_key[key]
+        assets = {
+            'reference': self._dataset_representative_pdb_path(key),
+            'distances': self._dataset_residue_pair_distance_csv_path(key),
+            'presence_stats': self._dataset_residue_pair_presence_stats_csv_path(key),
+            'residue_stats': binding.residue_statistics_path,
+            'combo_stats': binding.residue_combination_statistics_path,
+            'md_root': binding.md_root_path,
+        }
+        # Snapshot the sources actually displayed by the observer, before the
+        # worker starts. Never assign another dataset's observer to this one.
+        for slot in self._protein_observer_slots():
+            panel = slot.get('panel')
+            if str(slot.get('dataset_key', '')) != key or panel is None:
+                continue
+            if panel.has_sequence():
+                assets['md_root'] = panel.sequence_folder()
+            elif not assets['reference'] and getattr(panel, '_pdb_text', ''):
+                assets['reference_text'] = panel._pdb_text
+        if not assets['md_root']:
+            _label, assets['md_root'] = self._observer_resolve_sequence_source(key)
+        # A globally loaded protein is shared view context. Keep it separately
+        # when multiple datasets are loaded rather than inventing ownership.
+        shared = {}
+        for attr, name in (('_protein_path', 'loaded_protein.pdb'), ('_pse_path', 'loaded_session.pse')):
+            path = getattr(self, attr, None)
+            if path and os.path.isfile(path) and os.path.splitext(path)[1].lower() == os.path.splitext(name)[1]:
+                shared[name] = path
+        assets['shared_view_files'] = shared
+        if len(self.db.list_datasets()) == 1 and not assets['reference']:
+            assets['reference'] = shared.get('loaded_protein.pdb', '')
+        return assets
+
     def _on_export(self, cat_name, path_ids):
-        """Export category paths to PDB files."""
+        """Export category paths and reloadable dataset files."""
         split_frame_paths = self._prompt_export_options()
         if split_frame_paths is None:
             return
@@ -8045,34 +8117,53 @@ class MainWindow(QMainWindow):
         if not dir_path:
             return
 
-        exported = export_paths_to_pdb(
-            self.db,
-            path_ids,
-            cat_name,
-            dir_path,
-            split_frame_paths=split_frame_paths,
-        )
+        keys = {self.db.get_dataset_key_for_path_id(pid) for pid in path_ids}
+        assets = {key: self._dataset_export_assets(key) for key in keys if key}
+        progress = DatasetExportProgress(self)
+        progress.setWindowTitle("Export Dataset")
+        progress.setWindowFlag(Qt.WindowCloseButtonHint, False)
+        progress_layout = QVBoxLayout(progress)
+        progress_layout.addWidget(QLabel("Extracting database paths and existing files; summarizing selected-path statistics."))
+        bar = QProgressBar()
+        bar.setRange(0, 0)
+        progress_layout.addWidget(bar)
+        worker = DatasetExportWorker(self.db, path_ids, cat_name, dir_path, split_frame_paths, assets, progress)
+        worker.finished.connect(progress.accept)
+        QTimer.singleShot(0, worker.start)
+        progress.exec()
+        worker.wait()
+        if worker.error:
+            QMessageBox.warning(self, "Export Failed", worker.error)
+            return
+        report = worker.result
         mode_text = "split by path" if split_frame_paths else "merged by frame"
         metadata_text = (
             "\nAn additional TXT metadata summary file was generated for split exports."
             if split_frame_paths
             else ""
         )
-        QMessageBox.information(
-            self, "Export Complete",
-            f"Exported {len(exported)} PDB files to:\n{dir_path}\n"
-            f"Mode: {mode_text}{metadata_text}"
+        message = (
+            f"Exported {report['pdb_count']} PDB files and {len(report['datasets'])} UI dataset(s) to:\n"
+            f"{report['directory']}\nMode: {mode_text}{metadata_text}\n\n"
+            "Use Add Dataset to select each dataset subfolder. See export_manifest.json for details."
         )
+        if report['warnings']:
+            QMessageBox.warning(self, "Export Complete with Missing Source Data",
+                                message + "\n\n" + "\n".join(report['warnings']))
+        else:
+            QMessageBox.information(self, "Export Complete", message)
 
     def _prompt_export_options(self) -> Optional[bool]:
         dialog = QDialog(self)
-        dialog.setWindowTitle("PDB Export Options")
+        dialog.setWindowTitle("Dataset Export Options")
         dialog.setModal(True)
 
         layout = QVBoxLayout(dialog)
         description = QLabel(
             "Choose whether paths from the same frame are exported into one PDB "
-            "file or split into multiple files."
+            "file or split into multiple files. Each source dataset also gets a reloadable "
+            "database, selected-path statistics and available protein/distance data. "
+            "Existing distance data and MD files are reused; no Pipeline stages are run."
         )
         description.setWordWrap(True)
         layout.addWidget(description)

@@ -102,9 +102,9 @@ def _build_path_records(
     for i, pt in enumerate(points):
         serial = atom_serial_start + i
         res_seq = i + 1
-        x_orig = pt.get("x_origin", pt["x"])
-        y_orig = pt.get("y_origin", pt["y"])
-        z_orig = pt.get("z_origin", pt["z"])
+        x_orig = pt["x"] if pt.get("x_origin") is None else pt["x_origin"]
+        y_orig = pt["y"] if pt.get("y_origin") is None else pt["y_origin"]
+        z_orig = pt["z"] if pt.get("z_origin") is None else pt["z_origin"]
         b_factor = pt.get("radius", 1.0)
         occ = 1.0
         lines.append(

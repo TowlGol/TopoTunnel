@@ -6,9 +6,9 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTableView, QHeaderView,
     QLabel, QPushButton, QLineEdit, QGroupBox, QListWidget,
     QListWidgetItem, QAbstractItemView, QMessageBox, QColorDialog,
-    QFileDialog, QTabBar, QMenu, QSizePolicy, QApplication,
+    QFileDialog, QMenu, QSizePolicy, QApplication,
 )
-from PySide6.QtCore import Qt, Signal, QItemSelectionModel, QTimer
+from PySide6.QtCore import Qt, Signal, QItemSelectionModel
 
 from TopoTunnel_UI.app.models.path_model import PathTableModel, COL_KEYS, COL_WIDTHS
 
@@ -134,37 +134,19 @@ class PathPanel(QWidget):
 
         right_layout.addWidget(cat_group, 1)
 
-        # ─── Sub-tab bar: All / Selected ─────────────────
-        tab_row = QHBoxLayout()
-        tab_row.setSpacing(6)
-
-        self._sub_tabs = QTabBar()
-        self._sub_tabs.addTab("All Paths")
-        self._sub_tabs.addTab("Selected (0)")
-        self._sub_tabs.setCurrentIndex(0)
-        self._sub_tabs.setTabToolTip(0, "Show all paths matching the current frame and residue filters")
-        self._sub_tabs.setTabToolTip(1, "Show the current selection immediately")
-        self._sub_tabs.setExpanding(False)
-        self._sub_tabs.setStyleSheet("QTabBar::tab { min-width: 100px; }")
-        self._sub_tabs.currentChanged.connect(self._on_sub_tab_changed)
-        tab_row.addWidget(self._sub_tabs)
-
-        self._load_profiles_btn = QPushButton("Load Profiles")
-        self._load_profiles_btn.setToolTip("Send the current selected paths to the profile chart")
-        self._load_profiles_btn.setEnabled(False)
-        self._load_profiles_btn.setVisible(False)
-        self._load_profiles_btn.clicked.connect(self._on_load_profiles)
-        tab_row.addWidget(self._load_profiles_btn)
-        tab_row.addStretch()
-
-        left_layout.addLayout(tab_row)
-
         # ─── Path Table ─────────────────────────────────
         path_header = QHBoxLayout()
         self._path_count_label = QLabel("Paths: 0")
         self._path_count_label.setStyleSheet("font-weight: bold;")
         path_header.addWidget(self._path_count_label)
         path_header.addStretch()
+
+        self._load_profiles_btn = QPushButton("Load Profiles")
+        self._load_profiles_btn.setProperty("flat", True)
+        self._load_profiles_btn.setToolTip("Send the current selected paths to the profile chart")
+        self._load_profiles_btn.setEnabled(False)
+        self._load_profiles_btn.clicked.connect(self._on_load_profiles)
+        path_header.addWidget(self._load_profiles_btn)
 
         # Batch add to category
         self._batch_add_btn = QPushButton("Add Selected to Category")
@@ -206,8 +188,6 @@ class PathPanel(QWidget):
 
     def init_model(self):
         """Initialize the table model after db is available."""
-        preserved_tab = self._sub_tabs.currentIndex()
-        preserved_selection_ids = set(self._manual_selected_path_ids or self.state.effective_path_ids)
         self._model = PathTableModel(self.db)
         self._table_filter_signature = None
         self._table.setModel(self._model)
@@ -227,12 +207,6 @@ class PathPanel(QWidget):
             lambda count: self._path_count_label.setText(f"Paths: {count:,}")
         )
         self._model.set_selected_paths(set(self.state.effective_path_ids))
-        self._on_sub_tab_changed(preserved_tab)
-        if preserved_tab == 0 and preserved_selection_ids:
-            QTimer.singleShot(
-                0,
-                lambda ids=preserved_selection_ids: self._sync_table_selection_from_path_ids(ids),
-            )
         self._update_selected_view_state()
 
     def prune_removed_path_ids(self, path_ids):
@@ -242,14 +216,14 @@ class PathPanel(QWidget):
         self._manual_selected_path_ids.difference_update(removed)
 
     def refresh(self):
-        """Reload data while respecting the active All Paths / Selected view."""
+        """Reload selected paths while preserving the current selection."""
         self._apply_table_filters(force=True)
         self._update_selected_view_state(refresh_table=False)
 
     def _apply_table_filters(self, *, force=False):
         if self._model is None:
             return
-        selected_ids = self._get_selected_view_path_ids() if self._sub_tabs.currentIndex() == 1 else None
+        selected_ids = self._get_selected_view_path_ids()
         residues = set(self.state.selected_residues) or None
         signature = (
             self.state.frame_min,
@@ -261,7 +235,7 @@ class PathPanel(QWidget):
             return
 
         # A model reset clears Qt's row selection; it must not clear the user's
-        # path selection or emit a new 3D preview merely because tabs changed.
+        # path selection or emit a new 3D preview during a table refresh.
         selection_model = self._table.selectionModel()
         was_blocked = selection_model.blockSignals(True)
         try:
@@ -567,15 +541,7 @@ class PathPanel(QWidget):
 
         if self._model:
             self._model.set_selected_paths(set(self.state.effective_path_ids))
-            if self._sub_tabs.currentIndex() == 0:
-                self._sync_table_selection_from_state()
         self._update_selected_view_state()
-
-    # ─── Sub-tab switching ───────────────────────────────
-    def _on_sub_tab_changed(self, index):
-        """Switch table scope immediately without changing the path selection."""
-        self._load_profiles_btn.setVisible(index == 1)
-        self.refresh()
 
     def _on_load_profiles(self):
         """Load charts on request; the Selected table is already up to date."""
@@ -595,8 +561,7 @@ class PathPanel(QWidget):
     def _update_selected_view_state(self, *, refresh_table=True):
         selected = self._get_selected_view_path_ids()
         n = len(selected)
-        self._sub_tabs.setTabText(1, f"Selected ({n})")
-        self._load_profiles_btn.setEnabled(n > 0 and self._sub_tabs.currentIndex() == 1)
+        self._load_profiles_btn.setEnabled(n > 0)
 
         if self._manual_selected_path_ids:
             self._status_label.setText(f"Table selection: {n} paths")
@@ -606,7 +571,7 @@ class PathPanel(QWidget):
             self._status_label.setText(f"Visible categories: {n} paths")
         else:
             self._status_label.setText("")
-        if refresh_table and self._sub_tabs.currentIndex() == 1:
+        if refresh_table:
             self._apply_table_filters()
 
     def _sync_table_selection_from_state(self):

@@ -20,7 +20,7 @@ TopoTunnel_UI/
 `-- database/            # Empty runtime directory for optional imports
 ```
 
-Experimental datasets and the CYP3A4 reproduction case are not included in the GitHub source repository. They can be downloaded from `https://zenodo.org/records/21287445` and loaded from any writable directory.
+Experimental datasets and the CYP3A4 reproduction case are not included in the GitHub source repository. They can be downloaded from `https://zenodo.org/records/24049648` and loaded from any writable directory.
 
 ### 1.1 Source File Index
 
@@ -37,6 +37,7 @@ Experimental datasets and the CYP3A4 reproduction case are not included in the G
 | `app/widgets/residue_combination_panel.py` | Residue-pair and motif comparison, filtering, constraint-based matching, and result linking. |
 | `core/state.py` | Shared model for datasets, path selections, filters, and visibility state. |
 | `core/exporter.py` | PDB export for selected paths and path categories. |
+| `core/dataset_export.py` | Reloadable selected-path datasets, recomputed statistics, and supporting structures. |
 | `core/residue_compare.py` | Loading, alignment, and difference calculation for single-residue statistics. |
 | `core/residue_combination.py` | Calculation and filtering of residue-pair and higher-order combination statistics. |
 | `db/tunnel_db.py` | Query interface for one SQLite tunnel dataset. |
@@ -57,7 +58,7 @@ Experimental datasets and the CYP3A4 reproduction case are not included in the G
 
 ## 2. System Requirements
 
-- Windows 10 or 11 is the primary tested platform, 64-bit recommended. The GUI has also been launched on macOS; complete cross-platform workflow and Linux support have not yet been systematically validated.
+- Target operating systems: Windows 11, macOS, and Linux; 64-bit recommended. Windows is the primary tested platform; the GUI has also been launched on macOS, while the complete workflow has not yet been systematically validated on macOS or Linux.
 - Python 3.10 or 3.11. Standard CPython in an isolated virtual environment is recommended.
 - A graphics driver supporting OpenGL 3.2 or newer for the VTK 3D view.
 - At least 8 GB RAM; 16 GB or more is recommended for large multi-dataset sessions.
@@ -261,6 +262,8 @@ When `Point Select` is disabled, lasso selection uses the path centerline. When 
 | `Protein...` | Load a reference `.pdb` or PyMOL `.pse` session. Non-protein PSE objects can be displayed as binding-site surfaces. |
 | `Residue Observer` | Show or hide the right-side paired structure observer. |
 | `Reference PDB` | Show or hide the loaded reference protein; unavailable until a structure is loaded. |
+| `Cartoon` / `Ball-and-Stick` / `Sticks` | Choose the reference protein representation. Ball-and-Stick and Sticks use the same element colors, atom radii and bond widths as Residue Observer. |
+| `Label` | Toggle residue names and sequence numbers on the reference protein, with chain IDs when available (for example, ALA 123 (A)). Labels follow the reference protein visibility and remain enabled across style changes. Off by default. |
 | Style menu | Select `cartoon`, `backbone`, `tube`, or `ca_spheres`. |
 | Alignment menu | `kabsch` performs rigid alignment using available anchors; `translate` applies translation only; `none` preserves input coordinates. |
 | `Opacity` slider | Control reference-protein opacity. The current main toolbar keeps this value at 100%. |
@@ -309,7 +312,7 @@ The path table includes `Dataset`, `Path ID`, `Frame`, `Length`, `Min R`, `Avg R
 | `Set Color` | Set the category display color. |
 | `Show All` / `Hide All` | Show or hide all manual categories. |
 | `Excl All` / `Incl All` | Mark all categories as excluded candidates or clear their exclusion state. |
-| `Export` | Export category paths as PDB files, either merged by frame or split into separate files. |
+| `Export` | Export category paths as PDB files plus reloadable UI datasets and available supporting structures/distance data. |
 | `Delete` | Delete the manual category without deleting original paths. |
 | `Add Selected to Category` | Append selected table rows to the current category and remove duplicates. |
 
@@ -320,28 +323,27 @@ Category list actions:
 - Right-click a category to show/hide, include/exclude, export, or delete it.
 - `[V]` means visible, `[X]` means excluded, and `[V|X]` means both states apply.
 
-### 11.2 Path Table Views
+### 11.2 Selected Path Table
 
 | Control | Purpose |
 |---|---|
-| `All Paths` | Default view. Show all paths satisfying the current frame and residue filters. |
-| `Selected (N)` | Switch directly to the current table selection, or current valid paths / visible category paths when no table rows are selected. No separate loading step is required. |
-| `Load Profiles` | Send the current selection to the profile chart; this is optional and does not control which paths appear in the table. |
+| `Load Profiles` | Send the current selection to the profile chart. Located immediately to the left of Add Selected to Category, with the same button styling. |
+| `Add Selected to Category` | Add selected paths to the active category. |
 
-`All Paths` and `Selected` are mutually exclusive table views. Switching between them preserves the current path selection. `Selected` updates when the effective selection or visible categories change, and remains in Selected mode when the table refreshes or a dataset is added. If there is no selection or visible category, the Selected table is empty. Both views respect the current frame and residue filters.
+The Paths page opens directly to the selected-path table; the All Paths and Selected tabs are no longer displayed. The table uses the current table selection, or current valid paths / visible category paths when no table rows are selected. It updates when the effective selection or visible categories change and preserves selection when refreshed or when a dataset is added. With no selection or visible category, the table is empty. Frame and residue filters still apply.
 
 ## 12. Residue Compare Tab
 
-This tab requires both datasets to provide `residue_statistics.csv`. Positive File B minus File A differences are shown in red; negative differences are blue; values near zero are white.
+Select one dataset in either File A or File B to immediately display its original residue statistics. Select a second dataset to automatically switch to comparison mode: positive File B minus File A differences are red, negative differences are blue, and values near zero are white. Clearing either selection returns to single-dataset statistics. Each selected dataset must provide `residue_statistics.csv`.
 
 | Control | Purpose |
 |---|---|
-| `File A`, `File B` | Choose the two loaded datasets to compare. |
+| `File A`, `File B` | Choose one dataset to inspect its statistics, or two datasets to compare. |
 | `Reload` | Clear linked residue selection and refresh views driven by the current selection. Changing either file reloads its CSV automatically. |
-| `Open Heatmap` | Open a larger residue-difference heatmap in a separate window. |
+| `Open Heatmap` | Open a larger statistics/comparison table that follows the current dataset selections. |
 | Heatmap `Close` | Close the separate heatmap window. |
 
-The table compares affected points, affected paths, mean/min/max radius, and cooperative-residue values. Clicking a row shows details below. Clicking a File A or File B cell sends the residue to the 3D selection. Cooperative-residue columns show increased and decreased partners.
+The table shows affected paths, mean/min/max radius, and cooperative-residue values. Clicking a row shows details below. Clicking a File A or File B cell sends the residue to the 3D selection. With one dataset, cooperative details show partner residues and their shared path counts; with two datasets, they show increased and decreased partners.
 
 ## 13. Residue Combination Compare Tab
 
@@ -517,7 +519,12 @@ The Statistics chart displays the mean and quantile range of paths currently sho
 
 ## 19. Exported Files
 
-- Path-category export produces PDB files; split-by-frame mode also produces text metadata summaries.
+- Path-category export creates a new export folder containing one subfolder per source dataset. In Add Dataset, select the individual dataset subfolders (multiple selections are supported). Local path IDs and source coordinate systems are preserved separately. Repeated exports create a new folder without overwriting previous results.
+- Each subfolder contains `preprocessed_paths.db`, `residue_statistics.csv`, `residue_combination_statistics.csv`, and a `pdb/` directory. The database contains only exported paths, including point geometry, render coordinates, residue links and positions. Session state is not copied. Residue statistics are recomputed from the exported stored path points; these may differ from pipeline statistics computed before path simplification.
+- Export first uses the data sources currently associated with the dataset in the UI, including the active Residue Observer sequence directory or loaded static structure, and then checks the dataset's companion files. Reference structures become `representative_frame.pdb`. Available MD frames are copied into `md_frames/` with a relative `MD_path.txt`. All available source frames are retained as structural context, including frames without selected paths. This can make exports large. A globally loaded protein/PyMOL file shared by multiple datasets is preserved separately under `view_context/`, without assigning it to the wrong dataset.
+- Export reads the loaded database and accompanying files directly; it does not import or execute Pipeline stages, remap topology, or recalculate distances from MD structures. Both NPY and CSV distance sources are supported: NPY rows use the source combination CSV; pair CSVs contain per-frame values, while combination CSVs contain explicitly identified cumulative values or distance;cumulative cells. Selected combination rows are assembled into `residue_pair_distances.npy` in the same order as the exported combination CSV. Higher-order rows can be assembled from existing pair values. `residue_distance_frames.json` preserves source frame IDs (legacy NPY files without an index retain the UI's sequential numbering). Path-presence statistics are summarized from these existing distances and exported paths. MD structures are copied only for portable viewing.
+- `export_manifest.json` records each dataset's source files, selected local path IDs, exported file list, and any missing companion files. Missing source data are reported explicitly rather than silently described as a complete export. Existing aggregate path-presence CSVs may be reused when exporting the entire source dataset; a subset requires existing per-frame distances to summarize its own presence statistics. Basic path display and profiles work with the exported database.
+- PDBs may be merged by frame or split by path. Split mode also writes a TXT metadata summary and `top100/` and `end100/` PDB rankings inside `pdb/`.
 - `Save Table` exports the currently visible residue-combination table as CSV.
 - First-time PKL loading creates `tunnel_data.db` in the dataset directory.
 

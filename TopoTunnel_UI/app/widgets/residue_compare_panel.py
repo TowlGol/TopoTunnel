@@ -4,6 +4,7 @@ Residue statistics CSV comparison panel with heatmap-style delta display.
 from __future__ import annotations
 
 import os
+from html import escape
 
 from PySide6.QtCore import Qt, Signal, QTimer
 from PySide6.QtGui import QColor, QBrush, QPalette
@@ -245,6 +246,7 @@ class ResidueHeatmapDialog(QDialog):
         layout.addWidget(self._table, 1)
 
         legend = QLabel("Legend: blue = File B lower than File A, red = File B higher than File A, white = no change")
+        self._legend = legend
         legend.setWordWrap(True)
         legend.setStyleSheet("color: #909399; font-size: 11px;")
         layout.addWidget(legend)
@@ -258,6 +260,7 @@ class ResidueHeatmapDialog(QDialog):
         layout.addWidget(self._cooperative_detail)
 
     def refresh(self, comparison: dict, rows: list[dict], metrics: list[str]):
+        self._legend.setText(self._panel._legend.text())
         if not comparison:
             self._summary.setText("No heatmap data.")
             self._table.setRowCount(0)
@@ -269,6 +272,8 @@ class ResidueHeatmapDialog(QDialog):
         left_name = os.path.basename(comparison.get("left_path", "") or "") or "File A"
         right_name = os.path.basename(comparison.get("right_path", "") or "") or "File B"
         self.setWindowTitle(f"Residue Heatmap - {left_name} vs {right_name}")
+        if comparison.get("single_side"):
+            self.setWindowTitle("Residue Statistics - " + comparison["dataset_label"])
         self._panel._populate_heatmap_table(
             self._table,
             self._summary,
@@ -316,8 +321,8 @@ class ResidueComparePanel(QWidget):
         layout.addWidget(header)
 
         hint = QLabel(
-            "Choose two loaded datasets that include `residue_statistics.csv` to compare residue-property changes. "
-            "Red means File B is higher; blue means File B is lower."
+            "Choose one dataset to inspect its residue statistics; choose a second to compare B minus A. "
+            "In comparison mode, red means File B is higher; blue means File B is lower."
         )
         hint.setWordWrap(True)
         hint.setStyleSheet("color: #909399; font-size: 11px;")
@@ -339,7 +344,7 @@ class ResidueComparePanel(QWidget):
         controls.addStretch()
         layout.addLayout(controls)
 
-        self._summary = QLabel("Load two residue-statistics CSV files to show the heatmap summary.")
+        self._summary = QLabel("Choose a dataset to display its residue statistics.")
         self._summary.setWordWrap(True)
         self._summary.setStyleSheet("color: #606266; font-size: 11px;")
         layout.addWidget(self._summary)
@@ -350,6 +355,7 @@ class ResidueComparePanel(QWidget):
         layout.addWidget(self._table, 1)
 
         legend = QLabel("Legend: blue = File B lower than File A, red = File B higher than File A, white = no change")
+        self._legend = legend
         legend.setWordWrap(True)
         legend.setStyleSheet("color: #909399; font-size: 11px;")
         layout.addWidget(legend)
@@ -457,9 +463,12 @@ class ResidueComparePanel(QWidget):
         self._left_dataset_key = str(self._left_combo.currentText() and self._dataset_key_for_path(left_path) or "")
         self._right_dataset_key = str(self._right_combo.currentText() and self._dataset_key_for_path(right_path) or "")
 
-        if not left_path or not right_path:
+        self._left_data = None
+        self._right_data = None
+        if not left_path and not right_path:
             self._comparison = None
-            self._summary.setText("Choose both File A and File B datasets to build the residue heatmap.")
+            self._summary.setText("Choose a dataset to display its residue statistics.")
+            self._legend.setText("")
             self._table.setRowCount(0)
             self._table.setColumnCount(0)
             self._detail.setText("Select a residue row to inspect its main changes.")
@@ -469,6 +478,18 @@ class ResidueComparePanel(QWidget):
             return
 
         try:
+            if not left_path or not right_path:
+                side = "left" if left_path else "right"
+                data = self._load_residue_statistics_cached(left_path or right_path)
+                if left_path:
+                    self._left_data = data
+                else:
+                    self._right_data = data
+                self._comparison = self._single_dataset_view(data, side)
+                self._legend.setText("Single dataset: cells show original values, not differences.")
+                self._popup_btn.setEnabled(True)
+                self._refresh_table()
+                return
             self._left_data = self._load_residue_statistics_cached(left_path)
             self._right_data = self._load_residue_statistics_cached(right_path)
             cache_key = (self._left_data.get("path", left_path), self._right_data.get("path", right_path))
@@ -477,8 +498,12 @@ class ResidueComparePanel(QWidget):
                 comparison = compare_residue_statistics(self._left_data, self._right_data)
                 self._comparison_cache[cache_key] = comparison
             self._comparison = comparison
+            self._legend.setText("Legend: blue = File B lower than File A, red = File B higher than File A, white = no change")
         except Exception as exc:
             self._comparison = None
+            self._left_data = None
+            self._right_data = None
+            self._legend.setText("")
             QMessageBox.warning(self, "Residue Compare", f"Failed to load residue-statistics CSV:\n{exc}")
             self._summary.setText("Failed to load one or both CSV files.")
             self._table.setRowCount(0)
@@ -503,6 +528,8 @@ class ResidueComparePanel(QWidget):
         return cached
 
     def _dataset_key_for_path(self, path: str) -> str:
+        if not path:
+            return ""
         normalized = os.path.abspath(str(path or "")).strip()
         for dataset in self._dataset_choices:
             candidate = os.path.abspath(str(dataset.get("residue_statistics_path", "") or "")).strip()
@@ -526,6 +553,70 @@ class ResidueComparePanel(QWidget):
             metrics,
         )
         self._refresh_heatmap_dialog(rows=rows, metrics=metrics)
+
+    def _single_dataset_view(self, data: dict, side: str) -> dict:
+        combo = self._left_combo if side == "left" else self._right_combo
+        rows = []
+        for rid, residue in sorted(data.get("residues", {}).items()):
+            rows.append({
+                "residue_id": rid,
+                "residue_label": f"#{rid} {residue['residue_name']}",
+                "single_side": side,
+                "present_left": side == "left",
+                "present_right": side == "right",
+                "values": dict(residue.get("metrics", {})),
+                "cooperative_details": residue.get("cooperative_details", {}),
+            })
+        return {
+            "single_side": side, "dataset_label": combo.currentText(),
+            "metrics": data.get("metrics", []), "rows": rows,
+            "row_count": len(rows),
+        }
+
+    def _populate_single_table(self, table, summary, detail, partners, view, rows, metrics):
+        side = view["single_side"]
+        dataset_key = self._left_dataset_key if side == "left" else self._right_dataset_key
+        current = table.item(table.currentRow(), 0)
+        selected_id = (current.data(Qt.UserRole) or {}).get("residue_id") if current else None
+        table.blockSignals(True)
+        sorting = table.isSortingEnabled()
+        table.setSortingEnabled(False)
+        table.clear()
+        table._comparison_metrics = list(metrics)
+        table.setColumnCount(3 + len(metrics))
+        table.setHorizontalHeaderLabels(["Residue", "A", "B"] + [metric_label(m) for m in metrics])
+        table.setColumnHidden(1, side != "left")
+        table.setColumnHidden(2, side != "right")
+        table.setRowCount(len(rows))
+        column = 1 if side == "left" else 2
+        table.horizontalHeaderItem(column).setToolTip("Select this residue in the displayed dataset.")
+        for row_index, row in enumerate(rows):
+            item = _SortableTableWidgetItem(row["residue_label"], int(row["residue_id"]))
+            item.setData(Qt.UserRole, row)
+            table.setItem(row_index, 0, item)
+            table.setItem(row_index, column, _SortableTableWidgetItem("", 1))
+            table.setCellWidget(row_index, column, self._presence_indicator_widget(
+                True, (dataset_key, int(row["residue_id"])) in self._selected_residue_keys))
+            for col, metric in enumerate(metrics, start=3):
+                value = float(row["values"].get(metric, 0.0))
+                cell = _SortableTableWidgetItem(_format_number(value), value)
+                cell.setTextAlignment(Qt.AlignCenter)
+                cell.setBackground(QBrush(QColor("#FFFFFF")))
+                cell.setToolTip(f"{view['dataset_label']}\n{metric_label(metric)}: {_format_number(value)}")
+                table.setItem(row_index, col, cell)
+                table.horizontalHeaderItem(col).setToolTip(metric_label(metric) + " (original value)")
+        summary.setText(f"{view['dataset_label']}: {len(rows)} residues, {len(metrics)} numeric properties. Select a second dataset to compare B minus A.")
+        self._apply_compact_column_widths(table)
+        table.setSortingEnabled(sorting)
+        table.blockSignals(False)
+        target_row = 0 if rows else -1
+        for index in range(table.rowCount()):
+            if (table.item(index, 0).data(Qt.UserRole) or {}).get("residue_id") == selected_id:
+                target_row = index
+                break
+        if target_row >= 0:
+            table.selectRow(target_row)
+        self._update_detail_for(table, detail, partners)
 
     def _visible_metrics(self, metrics) -> list[str]:
         return [
@@ -599,6 +690,11 @@ class ResidueComparePanel(QWidget):
         rows: list[dict],
         metrics: list[str],
     ):
+        if comparison.get("single_side"):
+            self._populate_single_table(table, summary_label, detail_label, cooperative_detail_box, comparison, rows, metrics)
+            return
+        table.setColumnHidden(1, False)
+        table.setColumnHidden(2, False)
         selected_residue_id = None
         current_row = table.currentRow()
         if current_row >= 0:
@@ -744,6 +840,17 @@ class ResidueComparePanel(QWidget):
             return
 
         row = row_item.data(Qt.UserRole) or {}
+        if row.get("single_side"):
+            parts = [f"{metric_label(metric)}: {_format_number(value)}" for metric, value in row["values"].items()]
+            detail_label.setText(row["residue_label"] + " | " + " | ".join(parts))
+            partners = row.get("cooperative_details", {})
+            lines = ["<b>Cooperative residues (shared path counts)</b>"]
+            for rid, partner in sorted(partners.items()):
+                lines.append(f"#{rid} {escape(str(partner.get('residue_name', '')))}: {int(partner.get('shared_count', 0))} paths")
+            if not partners:
+                lines.append("No cooperative residue details available.")
+            cooperative_detail_box.setHtml("<br>".join(lines))
+            return
         changed_metrics = sorted(
             (
                 (metric, cell)
@@ -799,7 +906,7 @@ class ResidueComparePanel(QWidget):
 
     def _open_heatmap_dialog(self):
         if not self._comparison:
-            QMessageBox.information(self, "Residue Heatmap", "Load both File A and File B first.")
+            QMessageBox.information(self, "Residue Heatmap", "Choose at least one dataset first.")
             return
 
         if self._heatmap_dialog is None:

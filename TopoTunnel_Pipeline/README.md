@@ -7,7 +7,7 @@ The pipeline supports two entry points:
 1. Run segmented CAVER calculations and aggregate their tunnel profiles.
 2. Start from an existing CAVER `tunnel_profiles.csv` file and prepare the topology-mapped UI dataset.
 
-The optional CYP3A4 reproduction data are distributed separately through Zenodo (`https://zenodo.org/records/21287445`). After downloading the deposited CAVER output, you can skip the CAVER stage and run only **Reference-Conformation Mapping and Dataset Preparation**.
+The optional CYP3A4 reproduction data are distributed separately through Zenodo (`https://zenodo.org/records/24049648`). After downloading the deposited CAVER output, you can skip the CAVER stage and run only **Reference-Conformation Mapping and Dataset Preparation**.
 
 ## 1. Processing Workflow
 
@@ -57,7 +57,7 @@ SQLite conversion            |
 
 Requirements:
 
-- Windows 10/11 is the primary tested platform. The Tkinter GUI and command-line stages may work on macOS/Linux, but the complete pipeline has not yet been systematically validated there.
+- Target operating systems: Windows 11, macOS, and Linux. The Pipeline uses Python/Tkinter and invokes the Java-based CAVER command-line tool directly. Windows is the primary tested platform; the complete pipeline has not yet been systematically validated on macOS or Linux.
 - Python 3.10 or 3.11 with Tk support
 - Java and CAVER 3.x only when running stage 01
 
@@ -255,7 +255,7 @@ Commands, stage timings, and errors are displayed in `Analysis Log`. Diagnose fa
 
 ## 8. CYP3A4 Quick Reproduction
 
-The CYP3A4 case is not included in this GitHub repository. Download the relevant structures, CAVER output, and processed data from `https://zenodo.org/records/21287445`, then select their extracted locations in the GUI. If you arrange the downloaded data in a local ignored `CYP3A4` directory beside the code, the shortest path is:
+The CYP3A4 case is not included in this GitHub repository. Download the relevant structures, CAVER output, and processed data from `https://zenodo.org/records/24049648`, then select their extracted locations in the GUI. If you arrange the downloaded data in a local ignored `CYP3A4` directory beside the code, the shortest path is:
 
 1. Run `python pipeline_gui.py`.
 2. Set `Aligned MD Frame Directory` to the extracted directory containing the 500 aligned PDB frames, for example `CYP3A4/inputs/pdb_frames`.

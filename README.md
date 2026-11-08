@@ -4,7 +4,7 @@ TopoTunnel is a topology-guided processing and visual-analytics framework for ma
 
 This GitHub repository contains the source code and documentation only. Experimental datasets are distributed separately through Zenodo:
 
-**Data record:** https://zenodo.org/records/21287445
+**Data record:** https://zenodo.org/records/24049648
 
 ## Main Capabilities
 
@@ -70,7 +70,7 @@ This video provides a complete walkthrough of TopoTunnel, including the source c
 
 ## Requirements
 
-- Windows 10 or 11 is the primary tested platform. The UI has also been launched on macOS; the complete workflow and Linux support have not yet been systematically validated.
+- Target operating systems: Windows 11, macOS, and Linux. Windows is the primary tested platform; the GUI has also been launched on macOS, while the complete workflow has not yet been systematically validated on macOS or Linux.
 - Python 3.10 or 3.11
 - Tk support for the Pipeline GUI
 - Java and CAVER 3.x only when tunnel profiles must be computed from PDB frames
