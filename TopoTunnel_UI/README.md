@@ -58,7 +58,7 @@ Experimental datasets and the CYP3A4 reproduction case are not included in the G
 
 ## 2. System Requirements
 
-- Target operating systems: Windows 11, macOS, and Linux; 64-bit recommended. Windows is the primary tested platform; the GUI has also been launched on macOS, while the complete workflow has not yet been systematically validated on macOS or Linux.
+- Target operating systems: Windows 11, macOS, and Linux; 64-bit recommended.
 - Python 3.10 or 3.11. Standard CPython in an isolated virtual environment is recommended.
 - A graphics driver supporting OpenGL 3.2 or newer for the VTK 3D view.
 - At least 8 GB RAM; 16 GB or more is recommended for large multi-dataset sessions.

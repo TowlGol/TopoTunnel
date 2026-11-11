@@ -70,7 +70,7 @@ This video provides a complete walkthrough of TopoTunnel, including the source c
 
 ## Requirements
 
-- Target operating systems: Windows 11, macOS, and Linux. Windows is the primary tested platform; the GUI has also been launched on macOS, while the complete workflow has not yet been systematically validated on macOS or Linux.
+- Target operating systems: Windows 11, macOS, and Linux.
 - Python 3.10 or 3.11
 - Tk support for the Pipeline GUI
 - Java and CAVER 3.x only when tunnel profiles must be computed from PDB frames

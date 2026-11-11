@@ -57,7 +57,7 @@ SQLite conversion            |
 
 Requirements:
 
-- Target operating systems: Windows 11, macOS, and Linux. The Pipeline uses Python/Tkinter and invokes the Java-based CAVER command-line tool directly. Windows is the primary tested platform; the complete pipeline has not yet been systematically validated on macOS or Linux.
+- Target operating systems: Windows 11, macOS, and Linux. The Pipeline uses Python/Tkinter and invokes the Java-based CAVER command-line tool directly.
 - Python 3.10 or 3.11 with Tk support
 - Java and CAVER 3.x only when running stage 01
 
