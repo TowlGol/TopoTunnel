@@ -58,7 +58,7 @@ Experimental datasets and the CYP3A4 reproduction case are not included in the G
 
 ## 2. System Requirements
 
-- Target operating systems: Windows 11, macOS, and Linux; 64-bit recommended.
+- Target operating systems: Windows, macOS, and Linux; 64-bit recommended.
 - Python 3.10 or 3.11. Standard CPython in an isolated virtual environment is recommended.
 - A graphics driver supporting OpenGL 3.2 or newer for the VTK 3D view.
 - At least 8 GB RAM; 16 GB or more is recommended for large multi-dataset sessions.
@@ -180,13 +180,13 @@ Missing optional files do not prevent basic database loading, but the correspond
 2. Click `Add Dataset` and select one or more dataset directories.
 3. Wait for loading to finish. The status area reports path count, residue count, and loaded dataset count.
 4. Select a dataset and click `Show Tunnels`.
-5. Open the `Paths` tab and use Ctrl/Shift to select multiple rows.
-6. Click `Sync Charts` to load profiles for the current valid paths.
-7. Add a second dataset before using residue comparison or cross-dataset matching.
+5. Select paths using the CAVER Cluster checkboxes (or `Select all clusters`) in `Datasets`, or use the 3D lasso. Open `Paths` to inspect that selection; use Ctrl/Shift to select multiple table rows. The table is empty until paths are selected or a category is shown.
+6. Click `Load Profiles`, immediately to the left of `Add Selected to Category`, to inspect the selected paths in the profile chart. `Sync Charts` also loads profiles for the current valid paths.
+7. Choose one dataset in `Residue Compare` to view its residue statistics. Add and choose a second dataset to compare statistics or perform cross-dataset matching.
 
 ## 7. Main Window Layout
 
-- **Top control area:** path color, difference overlays, entry/exit markers, protein display, frame range, and selection mode.
+- **Top control area:** path color and background opacity, entry/exit markers and size, reference-protein representation and labels, and selection controls.
 - **Left Control Panel:** `Datasets`, `Paths`, `Residue Compare`, and `Residue Combination Compare` tabs.
 - **Central 3D view:** tunnels, selected paths, residues, entry/exit points, protein, and combination markers.
 - **Right Residue Observer:** paired local structures and frame-by-frame comparison.
@@ -229,55 +229,40 @@ When `Point Select` is disabled, lasso selection uses the path centerline. When 
 
 ## 9. Top Control Area
 
-### 9.1 Path Display and Difference Overlays
+### 9.1 Path Display
 
 | Control | Purpose |
 |---|---|
 | `Color` slider | Adjust background path color from light gray toward black. |
 | `BG` slider | Adjust the opacity of unselected background paths. |
-| `Path Delta` | Color paths by pointwise displacement between original and current coordinates; red indicates larger change. |
-| `Exit Delta` | Color paths by the change in exit-to-cluster-center distance between original and current coordinates. |
-| Delta threshold slider | Hide paths whose enabled Delta value is at or below the threshold. The adjacent label shows the current value. |
-
-`Path Delta` describes displacement along the complete path, whereas `Exit Delta` focuses on exit-region rearrangement. Both require current and original coordinates in the database.
 
 ### 9.2 Layers and Selection
 
 | Button | Purpose |
 |---|---|
-| `Residues` | Show or hide residue positions in the 3D view. |
-| `Res Labels` | Show or hide labels for selected residues. |
-| `Entry/Exit` | Show or hide entry and exit points. Their colors follow the dataset colors and can be set independently with `Select Color`; the adjacent `Size` slider adjusts their displayed sphere size. |
-| `EE: All` / `EE: Current` | Show entry/exit points for all paths or only current valid paths. |
-| `Exit Cluster` | After activation, click an exit sphere to select visually connected exits in the current camera view. |
+| `Entry/Exit` | Show or hide entry and exit points. Enabling it reveals the adjacent `Size` slider for their displayed sphere size; disabling it hides the slider. In dataset-color mode, exits use the dataset path color. See the Datasets section for color overrides. |
+| `EE: All` / `EE: Current` | Show entry/exit points for all eligible paths or only current valid paths. Excluded paths remain hidden in both modes. |
 | `Focus` | Hide background paths and show only selected/valid paths. Shortcut: `F`. |
 | `Point Select` | Switch lasso targets between paths and entry/exit points. |
-| `Lasso` | Force ordinary left-drag to perform lasso selection. Shortcut: `L`. |
 | `Clear Sel` | Clear the current path selection. Shortcut: `Esc`. |
 
-### 9.3 Reference Protein and Binding Sites
+Press `L` to toggle lasso mode, or use the modifier-key gestures in Section 8.2.
+
+### 9.3 Reference Protein
 
 | Control | Purpose |
 |---|---|
-| `Protein...` | Load a reference `.pdb` or PyMOL `.pse` session. Non-protein PSE objects can be displayed as binding-site surfaces. |
+| `Datasets` → `Reference PDB` | Load a reference `.pdb` or PyMOL `.pse` session into the main view. This is the loading button; the main-view `Reference PDB` button toggles visibility. |
 | `Residue Observer` | Show or hide the right-side paired structure observer. |
 | `Reference PDB` | Show or hide the loaded reference protein; unavailable until a structure is loaded. |
-| `Cartoon` / `Ball-and-Stick` / `Sticks` | Choose the reference protein representation. Ball-and-Stick and Sticks use the same element colors, atom radii and bond widths as Residue Observer. |
+| `Cartoon` / `Ball-and-Stick` / `Sticks` | Choose the reference protein representation using the dropdown beside `Reference PDB`. Cartoon is the default. Ball-and-Stick and Sticks use the same element colors, atom radii and bond widths as Residue Observer. |
 | `Label` | Toggle residue names and sequence numbers on the reference protein, with chain IDs when available (for example, ALA 123 (A)). Labels follow the reference protein visibility and remain enabled across style changes. Off by default. |
-| Style menu | Select `cartoon`, `backbone`, `tube`, or `ca_spheres`. |
-| Alignment menu | `kabsch` performs rigid alignment using available anchors; `translate` applies translation only; `none` preserves input coordinates. |
-| `Opacity` slider | Control reference-protein opacity. The current main toolbar keeps this value at 100%. |
-| `Clear` | Remove the reference protein, PSE binding sites, and related caches. |
-| `Sites` | Show or hide binding-site surfaces loaded from a PSE session. |
 
-### 9.4 Frame Range
+### 9.4 Resizing the Control Area
 
-Click `Frame` to open the range menu:
+The controls wrap when the main view becomes too narrow for one row. The `Color` and `BG` labels stay grouped with their sliders; the entry/exit size slider stays with `Entry/Exit`. Widen the main view to fit more controls on the same row.
 
-| Button | Purpose |
-|---|---|
-| `Apply` | Use the entered minimum and maximum frame values to filter paths, the 3D view, and subsequent analyses. |
-| `Clear` | Remove the frame range and restore all frames. |
+For frame-based path filtering, use the chart workspace's `Path Filter` controls described in Section 16. The Residue Observer `Frame` control navigates structure frames.
 
 ## 10. Datasets Tab
 
@@ -287,14 +272,16 @@ The dataset tree supports Ctrl/Shift multi-selection. Expanding a dataset shows 
 |---|---|
 | `Add Dataset` | Select one or more dataset directories. The application recursively searches for the main `.db`/`.pkl` and optional statistics files. |
 | `Edit Prefix` | Change the short dataset prefix used in tables, charts, and comparisons. Prefixes remain unique within the session. |
-| `Pick Color` | Opens the `Select Color` dialog. Choose whether the selected color applies to Start Point, Endpoint, and/or Path; all three are selected by default. |
+| `Pick Color` | Opens the `Select Color` window with a color picker and the `Start Point`, `ENDpoint`, and `PATH` checkboxes. All three are checked by default. Choose a color, keep at least one target checked, and confirm to apply it to the current dataset. |
 | `Reference PDB` | Open a PDB/PSE chooser and load a structure into the central 3D view. |
 | `Show Tunnels` / `Hide Tunnels` | Show or hide tunnels from the selected datasets. |
-| `Cluster Colors` / `Uniform Color` | Switch between per-cluster colors and one color per dataset. |
+| `Cluster Colors` / `Dataset Colors` | Switch the current dataset between per-cluster colors and one color per dataset. |
 | `Cluster Labels` / `Hide Labels` | Show or hide 3D cluster labels. The behavior is clearest when one dataset is selected. |
 | `Remove` | Remove selected datasets from the current session without deleting files. |
 
 Cluster checkboxes select paths; they do not delete or recompute clusters.
+
+In dataset-color mode, each exit marker uses its dataset's path color. An independently chosen `ENDpoint` color is retained and used when that dataset is displayed in cluster-color mode. `Start Point` controls entry-marker color independently. Manual category highlights have their own `Set Color` control.
 
 ## 11. Paths Tab
 
@@ -322,6 +309,8 @@ Category list actions:
 - Double-click a category to toggle its 3D visibility.
 - Right-click a category to show/hide, include/exclude, export, or delete it.
 - `[V]` means visible, `[X]` means excluded, and `[V|X]` means both states apply.
+
+Right-click a category and choose `Exclude from Candidates` to exclude its paths from the candidate set. Their entry and exit markers are also hidden in the main view, including in `EE: All` mode. Choose `Remove Exclusion` to remove that category exclusion; other active exclusions and display filters still apply. These actions do not delete the source paths.
 
 ### 11.2 Selected Path Table
 
@@ -491,18 +480,18 @@ The Statistics chart displays the mean and quantile range of paths currently sho
 
 1. Load a dataset with `Add Dataset`.
 2. Click `Show Tunnels`.
-3. Narrow the scope with the frame range or CAVER Cluster checkboxes.
+3. Narrow the scope with CAVER Cluster checkboxes. After loading profiles, the chart workspace's `Path Filter` can also select paths by frame and hydrophobicity ranges.
 4. Select paths with the 3D lasso.
 5. Create a manual category in `Paths` and set its color.
 6. Click `Sync Charts` to inspect radius and hydrophobicity profiles.
-7. Export selected paths as PDB files.
+7. Select the category and click `Export` to save its paths as PDB files plus a reloadable UI dataset. Load the exported dataset subfolder with `Add Dataset`. Available structures and distance files are included; inspect `export_manifest.json` for any missing source data. Export uses the existing dataset and does not rerun the Pipeline.
 
 ### 18.2 Cross-Dataset Constraint Matching
 
 1. Load two datasets and assign distinct prefixes and colors.
 2. Select source paths in the source dataset.
 3. Open `Residue Combination Compare` and select File A and File B.
-4. Set `Source` and `Keep`, then click `Query`.
+4. Set `Source`. For a group query, set `Keep`; for a query using one source path, enable `Single-path search`, select exactly one source path, and set the Jaccard, exit-radius, and length-radius thresholds. Click `Query`.
 5. Inspect source count, exit region, length interval, and target-hit count in the status area.
 6. Click `Compare` to calculate residue-pair and combination differences.
 7. Use `Show`, `Show AB Res`, and `Residue Observer` to inspect local structures.

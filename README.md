@@ -12,9 +12,11 @@ This GitHub repository contains the source code and documentation only. Experime
 - Select or reuse a shared reference conformation.
 - Assign four surface-gap-ranked protein atoms to each tunnel point.
 - Compare tunnel ensembles across conformations and independent datasets.
-- Retrieve corresponding paths using residue composition, exit position, and path length constraints.
+- Retrieve corresponding paths using residue composition, exit position, and path length constraints, including single-path search with explicit Jaccard, exit-distance, and length-difference thresholds.
 - Inspect synchronized tunnel profiles, bottleneck residues, residue pairs, and higher-order residue motifs.
-- Export selected paths for downstream structural analysis and visualization.
+- Inspect residue statistics for one dataset or compare two datasets.
+- Display a reference protein as Cartoon, Ball-and-Stick, or Sticks, with optional residue-name and sequence-number labels.
+- Export selected paths as PDB files and reloadable UI datasets, using the loaded database and available companion files without rerunning the Pipeline.
 
 ## Repository Structure
 
@@ -70,7 +72,7 @@ This video provides a complete walkthrough of TopoTunnel, including the source c
 
 ## Requirements
 
-- Target operating systems: Windows 11, macOS, and Linux.
+- Target operating systems: Windows, macOS, and Linux.
 - Python 3.10 or 3.11
 - Tk support for the Pipeline GUI
 - Java and CAVER 3.x only when tunnel profiles must be computed from PDB frames
@@ -171,7 +173,9 @@ Then:
 2. Click `Add Dataset`.
 3. Select a generated dataset directory containing `preprocessed_paths.db`.
 4. Select the dataset and click `Show Tunnels`.
-5. Use the `Paths`, `Residue Compare`, and `Residue Combination Compare` tabs for interactive analysis.
+5. Select paths using dataset cluster checkboxes or the 3D lasso. The `Paths` page displays the selected paths directly; click `Load Profiles` to inspect their profiles.
+6. Choose one dataset in `Residue Compare` to inspect its statistics, or two datasets to compare them. Use `Residue Combination Compare` for cross-dataset path matching and residue-network analysis.
+7. To save a path subset, create a category in `Paths` and use its `Export` button. Reload an exported dataset subfolder with `Add Dataset`; available structures and distance data accompany the selected-path database. See [Exported Files](TopoTunnel_UI/README.md#19-exported-files) for contents and missing-data handling.
 
 The [UI documentation](TopoTunnel_UI/README.md) describes every button, mouse interaction, matching control, chart, and export operation.
 
